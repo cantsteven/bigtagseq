@@ -5,23 +5,108 @@ date: "2023-09-10"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
+```{r}
 library(tidyverse)
+library(DESeq2)
 
+#formatting files 
 
+setwd("/Users/stevenguerin/Documents/R Projects/tag-seq")
 
+#exp design data
+exp_design<- read.csv("~/Documents/R Projects/tag-seq/exp_design.csv")
+#deleting the first column
+colData<- exp_design[,2:ncol(exp_design)]
+#Set row names to the gene names
+rownames(colData) <- exp_design$id
+#reordering data by row names
+new_order1 <- sort(rownames(colData))
+colData <- colData[new_order1, ]
+#sorting colData data by region 
+hip_colData <- colData%>%
+  filter(region == "hippo")
+ec_colData <- colData%>%
+  filter(region == "entor")
+  
+#count data 
+rawcounts<- read.csv("~/Documents/R Projects/tag-seq/big_count_data.csv", check.names= FALSE)
+#deleting the first column
+counts_data<- rawcounts[,2:ncol(rawcounts)]
+#Set row names to the gene names
+rownames(counts_data) <- rawcounts$gene_id
+#Remove bottom 5 rows
+counts_data <- counts_data[1:(nrow(counts_data)-5),]
+#reordering data by column names
+new_order2 <- sort(colnames(counts_data))
+counts_data <- counts_data[, new_order2]
+#sorting counts_data by region 
+hip_counts_data<- counts_data[, grep("H", names(counts_data))]
+ec_counts_data<- counts_data[, grep("E", names(counts_data))]
 
+#Check to see if experimental design and count data frames match up, both should be TRUE 
+#hippo data
+all(colnames(hip_counts_data) %in% rownames(hip_colData))
+all(colnames(hip_counts_data) == rownames(hip_colData))
+#ec data
+all(colnames(ec_counts_data) %in% rownames(ec_colData))
+all(colnames(ec_counts_data) == rownames(ec_colData))
 
 ```
 
-## R Markdown
+```{r}
+#hippocampus 
+#construct DESeq object 
+hip_dds<- DESeqDataSetFromMatrix(countData = hip_counts_data,
+                       colData = hip_colData, 
+                       design = ~ treatment + sex)
+hip_dds
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+#prefiltering, only keeping genes with more than 10 reads 
+hip_keep<- rowSums(counts(hip_dds)) >= 10
+hip_dds<- hip_dds[keep,]
+hip_dds
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+#set a factor level- here we are choosing control
+hip_dds$treatment <- relevel(hip_dds$treatment, ref = "control")
 
-```{r cars}
-summary(cars)
+#Run DESeq on object.size
+hip_dds<- DESeq(hip_dds)
+hip_res <- results(hip_dds)
+summary(hip_res)
+```
+
+```{r}
+plotMA(hip_res)
+```
+
+```{r}
+hip_vsd <- vst(hip_dds)
+
+plotPCA(hip_vsd, intgroup=c("treatment", "sex"))
+```
+
+
+
+```{r}
+#entorhinal cortex 
+#construct DESeq object 
+ec_dds<- DESeqDataSetFromMatrix(countData = ec_counts_data,
+                       colData = ec_colData, 
+                       design = ~ treatment + sex)
+ec_dds
+
+#prefiltering, only keeping genes with more than 10 reads 
+ec_keep<- rowSums(counts(ec_dds)) >= 10
+ec_dds<- ec_dds[keep,]
+ec_dds
+
+#set a factor level- here we are choosing control
+ec_dds$treatment <- relevel(ec_dds$treatment, ref = "control")
+
+#Run DESeq on object.size
+ec_dds<- DESeq(ec_dds)
+ec_res <- results(ec_dds)
+summary(ec_res)
 ```
 
 ## Including Plots
