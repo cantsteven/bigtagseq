@@ -5,9 +5,21 @@ date: "2023-09-10"
 output: html_document
 ---
 
+Loading in packages and sorting the data 
 ```{r}
 library(tidyverse)
 library(DESeq2)
+library(apeglm) #to install: BiocManager::install("apeglm")
+library(annotables) #to install: install.packages("devtools"); devtools::install_github("stephenturner/annotables")
+library(biobroom) #to install: BiocManager::install("biobroom")
+library(WGCNA) #to install: BiocManager::install("WGCNA") 
+  #https://bioinformaticsworkbook.org/tutorials/wgcna.html#gsc.tab=0
+  #https://alexslemonade.github.io/refinebio-examples/04-advanced-topics/network-analysis_rnaseq_01_wgcna.html
+library(EnhancedVolcano) #BiocManager::install('EnhancedVolcano')
+  #https://bioconductor.org/packages/devel/bioc/vignettes/EnhancedVolcano/inst/doc/EnhancedVolcano.html
+library(org.Rn.eg.db) #to install: BiocManager::install("org.Rn.eg.db")
+  #this is for annotation of the rat genes 
+
 
 #formatting files 
 
@@ -24,9 +36,12 @@ new_order1 <- sort(rownames(colData))
 colData <- colData[new_order1, ]
 #sorting colData data by region 
 hip_colData <- colData%>%
-  filter(region == "hippo")
+  filter(region == "hippo")%>%
+  select(-3)
+
 ec_colData <- colData%>%
-  filter(region == "entor")
+  filter(region == "entor")%>%
+    select(-3)
   
 #count data 
 rawcounts<- read.csv("~/Documents/R Projects/tag-seq/big_count_data.csv", check.names= FALSE)
@@ -53,46 +68,126 @@ all(colnames(ec_counts_data) == rownames(ec_colData))
 
 ```
 
+Hippocampus DESeq object 
 ```{r}
 #hippocampus 
 #construct DESeq object 
 hip_dds<- DESeqDataSetFromMatrix(countData = hip_counts_data,
                        colData = hip_colData, 
-                       design = ~ treatment + sex)
+                       design = ~treatment + sex)
 hip_dds
 
-#prefiltering, only keeping genes with more than 10 reads 
+resultsNames(hip_dds)
+
+#prefiltering, only keeping genes with more than XX reads 
 hip_keep<- rowSums(counts(hip_dds)) >= 10
 hip_dds<- hip_dds[keep,]
 hip_dds
 
-#set a factor level- here we are choosing control
-hip_dds$treatment <- relevel(hip_dds$treatment, ref = "control")
-
 #Run DESeq on object.size
 hip_dds<- DESeq(hip_dds)
-hip_res <- results(hip_dds)
+hip_res <- results(hip_dds, contrast = c("treatment", "ethanol", "control")) #("condition", "level_to_compare", "base_level")
 summary(hip_res)
+
+#genes ranked by p-value
+hip_resOrdered <- hip_res[order(hip_res$padj),]
+
+#gene name annotation
+hip_resOrdered_df <- as.data.frame(hip_resOrdered)
+hip_resOrdered_df$symbol <- mapIds(org.Rn.eg.db, keys = rownames(hip_resOrdered_df), keytype = "ENSEMBL", column = "SYMBOL")
+hip_resOrdered_df
+
+#write.csv(hip_resOrdered_df, "~/Documents/R Projects/tag-seq/bigtagseq/hippocampus_big_deg.csv", row.names = TRUE)
+
 ```
 
+Hippocampus Males only DDS Object
 ```{r}
-plotMA(hip_res)
+male_hip_counts_data <-  hip_counts_data[,c("1_H","10_H", "11_H", "12_H", "13_H", "2_H", "29_H", "30_H", "31_H", "34_H", "37_H", "38_H", "39_H", "4_H", "40_H", "5_H", "8_H", "9_H")]
+
+male_hip_colData <- hip_colData%>%
+  filter(sex == "male")
+
+male_hip_dds<- DESeqDataSetFromMatrix(countData = male_hip_counts_data,
+                       colData = male_hip_colData, 
+                       design = ~ treatment)
+
+#Run DESeq on object.size
+male_hip_dds<- DESeq(male_hip_dds)
+male_hip_res <- results(male_hip_dds)
+summary(male_hip_res)
+
+#genes ranked by p-value
+male_hip_resOrdered <- male_hip_res[order(male_hip_res$pvalue),]
+
+#write.csv(male_hip_resOrdered, "~/Documents/R Projects/tag-seq/bigtagseq/maledata_guerin.csv", row.names=TRUE)
+
+
+#tidy version of ordered genes 
+male_hip_res_tidy <- tidy.DESeqResults(male_hip_resOrdered)
+male_hip_res_tidy
+
+#matrix with gene names 
+male_hip_res_tidy %>% 
+    dplyr::arrange(p.adjusted) %>% 
+    head(40) %>% 
+    dplyr::inner_join(rnor6, by = c("gene" = "ensgene")) %>% 
+    dplyr::select(gene, estimate, p.adjusted, symbol, description) %>% 
+    knitr::kable(.)
 ```
 
+plotting some genes from the males: 
 ```{r}
-hip_vsd <- vst(hip_dds)
-
-plotPCA(hip_vsd, intgroup=c("treatment", "sex"))
+plotCounts(male_hip_dds, gene="ENSRNOG00000046834", intgroup="treatment")
 ```
 
+Hippocampus Females only DDS Object
+```{r}
+fem_hip_counts_data <-  hip_counts_data[,c("16_H","17_H", "18_H", "19_H", "21_H", "22_H", "23_H", "24_H", "25_H", "28_H", "41_H", "43_H", "44_H", "45_H", "46_H", "47_H", "48_H", "49_H", "50_H", "52_H")]
 
+fem_hip_colData <- hip_colData%>%
+  filter(sex == "female")
 
+fem_hip_dds<- DESeqDataSetFromMatrix(countData = fem_hip_counts_data,
+                       colData = fem_hip_colData, 
+                       design = ~ treatment)
+
+#set a factor level- here we are choosing control
+fem_hip_dds$treatment <- relevel(fem_hip_dds$treatment, ref = "control")
+
+#Run DESeq on object.size
+fem_hip_dds<- DESeq(fem_hip_dds)
+fem_hip_res <- results(fem_hip_dds)
+summary(fem_hip_res)
+
+#genes ranked by p-value
+fem_hip_resOrdered <- fem_hip_res[order(fem_hip_res$pvalue),]
+
+#tidy version of ordered genes 
+fem_hip_res_tidy <- tidy.DESeqResults(fem_hip_resOrdered)
+fem_hip_res_tidy
+
+#matrix with gene names 
+fem_hip_res_tidy %>% 
+    dplyr::arrange(p.adjusted) %>% 
+    head(40) %>% 
+    dplyr::inner_join(rnor6, by = c("gene" = "ensgene")) %>% 
+    dplyr::select(gene, estimate, p.adjusted, symbol, description) %>% 
+    knitr::kable(.)
+```
+
+plotting some genes from the females: 
+```{r}
+plotCounts(fem_hip_dds, gene="ENSRNOG00000046834", intgroup="treatment")
+```
+
+Entorhinal Cortex DSeq object 
 ```{r}
 #entorhinal cortex 
 #construct DESeq object 
 ec_dds<- DESeqDataSetFromMatrix(countData = ec_counts_data,
                        colData = ec_colData, 
-                       design = ~ treatment + sex)
+                       design = ~ treatment)
 ec_dds
 
 #prefiltering, only keeping genes with more than 10 reads 
@@ -105,16 +200,104 @@ ec_dds$treatment <- relevel(ec_dds$treatment, ref = "control")
 
 #Run DESeq on object.size
 ec_dds<- DESeq(ec_dds)
-ec_res <- results(ec_dds)
+ec_res <- results(ec_dds, contrast = c("treatment", "control", "ethanol"))
 summary(ec_res)
+
+#genes ranked by p-value
+ec_resOrdered <- ec_res[order(ec_res$pvalue),]
+
+#gene name annotation
+ec_resOrdered_df <- as.data.frame(ec_resOrdered)
+ec_resOrdered_df$symbol <- mapIds(org.Rn.eg.db, keys = rownames(ec_resOrdered_df), keytype = "ENSEMBL", column = "SYMBOL")
+ec_resOrdered_df
+
+#write.csv(ec_resOrdered_df, "~/Documents/R Projects/tag-seq/bigtagseq/entorhinal_big_deg.csv", row.names = TRUE)
+
 ```
 
-## Including Plots
+plotting some genes: 
+```{r}
+plotCounts(hip_dds, gene="ENSRNOT00055029092", intgroup="treatment")
 
-You can also embed plots, for example:
+plotCounts(ec_dds, gene="ENSRNOT00000104106", intgroup="treatment")
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+#ggplot(d, aes(x=sex, y = count))+ 
+  #geom_jitter()+ 
+  #geom_boxplot(alpha = 0.5)+ 
+  #labs(title = "ubiquitously transcribed tetratricopeptide repeat containing, Y-linked")+ 
+  #ylab("normalized count")
+
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+MA Plots
+```{r}
+#without shrinkage: 
+plotMA(hip_res)
+
+plotMA(ec_res)
+
+#with shrinkage: 
+#hippocampus
+resultsNames(hip_dds)
+
+hip_resLFC <- lfcShrink(hip_dds, coef="treatment_ethanol_vs_control", type="apeglm")
+hip_resLFC
+
+plotMA(hip_resLFC, ylim=c(-2,2))
+
+#entorhinal cortex
+resultsNames(ec_dds)
+
+ec_resLFC <- lfcShrink(ec_dds, coef="treatment_ethanol_vs_control", type="apeglm")
+ec_resLFC
+
+plotMA(ec_resLFC, ylim=c(-2,2))
+```
+
+
+PCA Plots
+```{r}
+#hippocampus
+hip_vsd <- vst(hip_dds)
+
+plotPCA(hip_vsd, intgroup=c("treatment", "sex"))
+
+#hippocampus
+ec_vsd <- vst(ec_dds)
+
+plotPCA(ec_vsd, intgroup=c("treatment", "sex"))
+```
+
+Volcano Plots
+
+```{r}
+#hippocampus  
+EnhancedVolcano(hip_resOrdered_df,
+  lab = hip_resOrdered_df$symbol,
+  x = 'log2FoldChange',
+  y = 'padj',
+  boxedLabels = TRUE,
+  drawConnectors = TRUE,
+  pCutoff = 0.05, 
+  FCcutoff = 0.02,
+  xlim = c(-0.75, 0.75),
+  ylim = c(0, 4.5),
+  title = "Hippocampus"
+)
+
+
+#entorhinal cortex  
+EnhancedVolcano(ec_resOrdered_df,
+  lab = ec_resOrdered_df$symbol,
+  x = 'log2FoldChange',
+  y = 'padj', 
+  boxedLabels = TRUE,
+  drawConnectors = TRUE,
+  pCutoff = 0.05, 
+  FCcutoff = 0.02,
+  xlim = c(-0.75, 0.75),
+  ylim = c(0, 4.5),
+  title = "Entorhinal Cortex"
+)
+
+```
