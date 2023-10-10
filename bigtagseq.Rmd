@@ -10,7 +10,7 @@ Loading in packages and sorting the data
 library(tidyverse)
 library(DESeq2)
 library(apeglm) #to install: BiocManager::install("apeglm")
-library(annotables) #to install: install.packages("devtools"); devtools::install_github("stephenturner/annotables")
+#library(annotables) #to install: install.packages("devtools"); devtools::install_github("stephenturner/annotables")
 library(biobroom) #to install: BiocManager::install("biobroom")
 library(WGCNA) #to install: BiocManager::install("WGCNA") 
   #https://bioinformaticsworkbook.org/tutorials/wgcna.html#gsc.tab=0
@@ -19,6 +19,13 @@ library(EnhancedVolcano) #BiocManager::install('EnhancedVolcano')
   #https://bioconductor.org/packages/devel/bioc/vignettes/EnhancedVolcano/inst/doc/EnhancedVolcano.html
 library(org.Rn.eg.db) #to install: BiocManager::install("org.Rn.eg.db")
   #this is for annotation of the rat genes 
+library(ggpubr)
+library(pheatmap) #heatmap
+library(stats) #for anovas
+library(emmeans) #for anovas
+library(CorLevelPlot) #devtools::install_github("kevinblighe/CorLevelPlot")
+library(GO.db) #to install: BiocManager::install("GO.db") ;this is for go analysis 
+library(AnnotationDbi) #to install: BiocManager::install("AnnotationDbi")
 
 
 #formatting files 
@@ -37,11 +44,11 @@ colData <- colData[new_order1, ]
 #sorting colData data by region 
 hip_colData <- colData%>%
   filter(region == "hippo")%>%
-  select(-3)
+  subset(select = -region)
 
 ec_colData <- colData%>%
   filter(region == "entor")%>%
-    select(-3)
+  subset(select = -region)
   
 #count data 
 rawcounts<- read.csv("~/Documents/R Projects/tag-seq/big_count_data.csv", check.names= FALSE)
@@ -81,12 +88,13 @@ resultsNames(hip_dds)
 
 #prefiltering, only keeping genes with more than XX reads 
 hip_keep<- rowSums(counts(hip_dds)) >= 10
-hip_dds<- hip_dds[keep,]
+hip_dds<- hip_dds[hip_keep,]
 hip_dds
 
-#Run DESeq on object.size
+#Run DESeq on object.size; use resultNames(hip_dds) to understand the different results we can look for in the dds object 
 hip_dds<- DESeq(hip_dds)
 hip_res <- results(hip_dds, contrast = c("treatment", "ethanol", "control")) #("condition", "level_to_compare", "base_level")
+
 summary(hip_res)
 
 #genes ranked by p-value
@@ -100,6 +108,46 @@ hip_resOrdered_df
 #write.csv(hip_resOrdered_df, "~/Documents/R Projects/tag-seq/bigtagseq/hippocampus_big_deg.csv", row.names = TRUE)
 
 ```
+
+DESeq object for sex differences 
+```{r}
+#hippocampus 
+#construct DESeq object 
+hip_dds<- DESeqDataSetFromMatrix(countData = hip_counts_data,
+                       colData = hip_colData, 
+                       design = ~treatment + sex + treatment:sex)
+hip_dds
+
+resultsNames(hip_dds)
+
+#prefiltering, only keeping genes with more than XX reads 
+hip_keep<- rowSums(counts(hip_dds)) >= 10
+hip_dds<- hip_dds[hip_keep,]
+hip_dds
+
+#subset hip_dds to include only samples with ethanol treatment 
+eth_hip_dds <- hip_dds[hip_dds$treatment == "ethanol"]
+
+#Run DESeq on object.size
+eth_hip_dds<- DESeq(eth_hip_dds)
+#hip_res <- results(hip_dds, contrast = c(contrast_males <- results(hip_dds, contrast=c("treatment_ethanol_vs_control", "treatmentethanol", "treatmentcontrol", "sexmale"))
+#)) ("condition", "level_to_compare", "base_level")
+#summary(hip_res)
+
+eth_hip_res <- results(eth_hip_dds, contrast=c("sex", "male", "female"))
+
+
+#genes ranked by p-value
+hip_resOrdered <- eth_hip_res[order(eth_hip_res$padj),]
+
+#gene name annotation
+hip_resOrdered_df <- as.data.frame(hip_resOrdered)
+hip_resOrdered_df$symbol <- mapIds(org.Rn.eg.db, keys = rownames(hip_resOrdered_df), keytype = "ENSEMBL", column = "SYMBOL")
+hip_resOrdered_df
+
+#write.csv(hip_resOrdered_df, "~/Documents/R Projects/tag-seq/bigtagseq/hippocampus_big_deg.csv", row.names = TRUE)
+```
+
 
 Hippocampus Males only DDS Object
 ```{r}
@@ -187,12 +235,12 @@ Entorhinal Cortex DSeq object
 #construct DESeq object 
 ec_dds<- DESeqDataSetFromMatrix(countData = ec_counts_data,
                        colData = ec_colData, 
-                       design = ~ treatment)
+                       design = ~ treatment + sex)
 ec_dds
 
 #prefiltering, only keeping genes with more than 10 reads 
 ec_keep<- rowSums(counts(ec_dds)) >= 10
-ec_dds<- ec_dds[keep,]
+ec_dds<- ec_dds[ec_keep,]
 ec_dds
 
 #set a factor level- here we are choosing control
@@ -200,7 +248,7 @@ ec_dds$treatment <- relevel(ec_dds$treatment, ref = "control")
 
 #Run DESeq on object.size
 ec_dds<- DESeq(ec_dds)
-ec_res <- results(ec_dds, contrast = c("treatment", "control", "ethanol"))
+ec_res <- results(ec_dds, contrast = c("treatment", "ethanol", "control")) #("condition", "level_to_compare", "base_level")
 summary(ec_res)
 
 #genes ranked by p-value
@@ -226,7 +274,7 @@ plotCounts(ec_dds, gene="ENSRNOT00000104106", intgroup="treatment")
   #geom_boxplot(alpha = 0.5)+ 
   #labs(title = "ubiquitously transcribed tetratricopeptide repeat containing, Y-linked")+ 
   #ylab("normalized count")
-
+!((51))
 ```
 
 MA Plots
@@ -254,7 +302,6 @@ ec_resLFC
 plotMA(ec_resLFC, ylim=c(-2,2))
 ```
 
-
 PCA Plots
 ```{r}
 #hippocampus
@@ -269,7 +316,6 @@ plotPCA(ec_vsd, intgroup=c("treatment", "sex"))
 ```
 
 Volcano Plots
-
 ```{r}
 #hippocampus  
 EnhancedVolcano(hip_resOrdered_df,
@@ -279,12 +325,13 @@ EnhancedVolcano(hip_resOrdered_df,
   boxedLabels = TRUE,
   drawConnectors = TRUE,
   pCutoff = 0.05, 
-  FCcutoff = 0.02,
-  xlim = c(-0.75, 0.75),
+  FCcutoff = 0.1,
+  xlim = c(-0.5, 0.5),
   ylim = c(0, 4.5),
-  title = "Hippocampus"
+  title = "Hippocampus",
+  legendPosition = 'none',
+  subtitle = "Differential Expresion"
 )
-
 
 #entorhinal cortex  
 EnhancedVolcano(ec_resOrdered_df,
@@ -294,10 +341,339 @@ EnhancedVolcano(ec_resOrdered_df,
   boxedLabels = TRUE,
   drawConnectors = TRUE,
   pCutoff = 0.05, 
-  FCcutoff = 0.02,
-  xlim = c(-0.75, 0.75),
+  FCcutoff = 0.1,
+  xlim = c(-0.5, 0.5),
   ylim = c(0, 4.5),
-  title = "Entorhinal Cortex"
+  title = "Entorhinal Cortex",
+  legendPosition = 'none',
+  subtitle = "Differential Expresion"
 )
 
 ```
+
+Gene count graphs by region 
+```{r}
+#extracting the counts for genes of interest 
+hip_genelist<- counts(hip_dds, normalized = TRUE)%>%
+  as.data.frame()%>%
+  tibble::rownames_to_column(var = "ENSEMBL")%>% #converting row name to a column 
+  mutate(symbol = mapIds(org.Rn.eg.db, keys = ENSEMBL, keytype = "ENSEMBL", column = "SYMBOL"))%>%
+  subset(select = -ENSEMBL)%>%
+  filter(symbol %in% c("Clu","Gfap", "Apln", "Lxn", "Grin2c", "Aqp4", "Pltp", "Htra1"))
+
+hip_genelist
+
+#modyfing hip_colData so that the the rownames is a column 
+hip_colData2 <- hip_colData%>%
+  tibble::rownames_to_column(var = "id")
+
+hip_colData2
+
+#Gfap
+#data frame
+gfapgene<- hip_genelist%>%
+  filter(symbol == "Gfap")%>%
+  subset(select = -symbol)%>% #get rid of the symbol column
+  t()%>% #transpose
+  as.data.frame() %>%
+  tibble::rownames_to_column(var = "id")%>%
+  {colnames(.)[2] <- "count"; .}%>%
+  full_join(hip_colData2, by = "id")
+
+#anovas
+gfapmodel <- lm(count ~ sex * treatment, data = gfapgene)
+gfapanova <- anova(gfapmodel)
+gfapanova
+
+emmeans(gfapmodel, pairwise ~ sex + treatment)
+
+#graph 
+gfapcountsgraph <- ggboxplot(gfapgene, "sex", "count",
+               color = "treatment", 
+               add = "jitter",
+               main = "Gfap Normalized Counts",
+               palette = "jco") + 
+    stat_compare_means(aes(group = sex), label = "p.signif",
+                       label.y = 1500)
+
+gfapcountsgraph
+
+#Aqp4
+#data frame
+aqp4gene<- hip_genelist%>%
+  filter(symbol == "Aqp4")%>%
+  subset(select = -symbol)%>% #get rid of the symbol column
+  t()%>% #transpose
+  as.data.frame() %>%
+  tibble::rownames_to_column(var = "id")%>%
+  {colnames(.)[2] <- "count"; .}%>%
+  full_join(hip_colData2, by = "id")
+
+#anovas
+aqp4model <- lm(count ~ sex * treatment, data = aqp4gene)
+aqp4anova <- anova(aqp4model)
+aqp4anova
+
+emmeans(gfapmodel, pairwise ~ sex + treatment)
+
+#graph 
+aqp4countsgraph <- ggboxplot(aqp4gene, "sex", "count",
+               color = "treatment", 
+               add = "jitter",
+               main = "Aqp4 Normalized Counts",
+               palette = "jco") + 
+    stat_compare_means(aes(group = sex), label = "p.signif",
+                       label.y = 750)
+
+aqp4countsgraph
+
+
+ggarrange(gfapcountsgraph, aqp4countsgraph, ncol = 2, common.legend = TRUE)
+
+
+```
+
+Heatmaps
+```{r}
+#Hippocampus
+#list of genes we want to use
+hip_genelist<- counts(hip_dds, normalized = TRUE)%>%
+  as.data.frame()%>%
+  tibble::rownames_to_column(var = "ENSEMBL")%>% #converting row name to a column 
+  mutate(symbol = mapIds(org.Rn.eg.db, keys = ENSEMBL, keytype = "ENSEMBL", column = "SYMBOL"))%>%
+  subset(select = -ENSEMBL)%>%
+  filter(symbol %in% c("Clu","Gfap", "Apln", "Lxn", "Grin2c", "Aqp4", "Pltp", "Htra1"))
+
+#taking the df you made in the previous chunk and editing it a bit 
+row.names(hip_genelist) <- hip_genelist$symbol
+hip_genelist<- hip_genelist%>%
+  subset(select = -symbol)
+
+#arranging hip_colData
+hip_colData_arranged <- hip_colData%>%
+  arrange(treatment,sex)
+
+hip_colData_order <- rownames(hip_colData_arranged)
+hip_genelist_reordered <- hip_genelist[, hip_colData_order]
+
+#heatmap
+hip_heatmap<- pheatmap(
+  hip_genelist_reordered,
+  cluster_rows = FALSE,
+  cluster_cols = FALSE, 
+  annotation= hip_colData,
+  show_rownames = TRUE,
+  gaps_col = c(10, 18, 28),
+  gaps_row = 7,
+  border_color = FALSE,
+  main = "Normalized Counts of DEGs in the Hippocampus",
+  scale = "row"
+)
+
+#Entorhinal Cortex
+#list of genes we want to use
+ec_genelist<- counts(ec_dds, normalized = TRUE)%>%
+  as.data.frame()%>%
+  tibble::rownames_to_column(var = "ENSEMBL")%>% #converting row name to a column 
+  mutate(symbol = mapIds(org.Rn.eg.db, keys = ENSEMBL, keytype = "ENSEMBL", column = "SYMBOL"))%>%
+  subset(select = -ENSEMBL)%>%
+  filter(symbol %in% c("Gfap","Aqp4"))
+
+#taking the df you made in the previous chunk and editing it a bit 
+row.names(ec_genelist) <- ec_genelist$symbol
+ec_genelist<- ec_genelist%>%
+  subset(select = -symbol)
+
+#arranging hip_colData
+ec_colData_arranged <- ec_colData%>%
+  arrange(treatment,sex)
+
+ec_colData_order <- rownames(ec_colData_arranged)
+ec_genelist_reordered <- ec_genelist[, ec_colData_order]
+
+#heatmap
+ec_heatmap<- pheatmap(
+  ec_genelist_reordered,
+  cluster_rows = FALSE,
+  cluster_cols = FALSE, 
+  annotation= ec_colData,
+  show_rownames = TRUE,
+  gaps_col = c(10, 19, 29),
+  border_color = FALSE,
+  cellheight = 25,
+  main = "Normalized Counts of DEGs in the Entorhinal Cortex",
+  scale = "row"
+)
+```
+
+WGCNA
+```{r}
+##Tutorials:
+#https://rstudio-pubs-static.s3.amazonaws.com/687551_ed469310d8ea4652991a2e850b0018de.html
+#https://www.youtube.com/watch?v=gYE59uEMXT4&t=419s
+#https://wikis.utexas.edu/display/bioiteam/Clustering+using+WGCNA
+
+#detect outlier genes
+gsg<- goodSamplesGenes(t(hip_counts_data))
+summary(gsg)
+gsg$allOK #result is false- so there are outliers
+
+table(gsg$goodGenes)
+table(gsg$goodSamples)
+
+#remove genes that are detected as outliers
+data_nooutlier <- hip_counts_data[gsg$goodGenes == TRUE,]
+
+#remove outlier samples - hierarchical clustering (method 1)
+htree <- hclust(dist(t(data_nooutlier)), method = "average")
+plot(htree)
+
+#pca (method 2 for identifying outliers)
+pca <- prcomp(t(hip_counts_data))
+pca.dat <- pca$x
+
+pca.var <- pca$sdev^2
+pca.var.percent <- round(pca.var/sum(pca.var) *100, digits = 2)
+
+pca.dat <- as.data.frame(pca.dat)
+
+ggplot(pca.dat, aes(PC1, PC2)) + 
+  geom_point() + 
+  geom_text(label = rownames(pca.dat)) + 
+  labs(x = paste0('PC1: ',pca.var.percent[1], ' %'),
+       y = paste0('PC2: ', pca.var.percent[2], ' %'))
+
+
+# Normalization with DESeq
+#ensuring ronames and column names are identical
+all(rownames(hip_colData) %in% colnames(hip_counts_data))
+all(rownames(hip_colData) == colnames(hip_counts_data))
+
+#create dds 
+hip_dds2 <- DESeqDataSetFromMatrix(countData = hip_counts_data, 
+                                   colData = hip_colData, 
+                                   design = ~1) #not specifying a model 
+
+#remove all genes with counts > 15 in more than 75% of samples
+hip_dds_75 <- hip_dds2[rowSums(counts(hip_dds2) >= 15) >= 24,]
+nrow(hip_dds_75) #9809 genes left 
+
+#perform variance stabilization
+hip_dds_norm <- vst(hip_dds_75)
+
+#get normalized counts
+hip_norm.counts <- assay(hip_dds_norm) %>%
+  t()
+
+# Network Construction --------
+power <- c(c(1:10), seq(from = 12, to = 50, by = 2))
+
+#call the network topology analysis function 
+hip_sft <- pickSoftThreshold(hip_norm.counts, 
+                  powerVector = power, 
+                  networkType = "signed",
+                  verbose = 5)
+
+hip_sft.data <- hip_sft$fitIndices
+
+#visualization to pick power
+hip_a1 <- ggplot(hip_sft.data, aes(Power, SFT.R.sq, label = Power)) + 
+  geom_point() + 
+  geom_text(nudge_y = 0.1) + 
+  geom_hline(yintercept = 0.8, color = 'red') + 
+  labs(x= 'Power', y = 'Scale free topology model fit, signed R^2') + 
+  theme_classic()
+
+hip_a1
+
+hip_a2 <- ggplot(hip_sft.data, aes(Power, mean.k., label= Power)) + 
+  geom_point() + 
+  geom_text(nudge_y = 0.1) + 
+  labs(x= 'Power', y = 'Mean Connectivity') + 
+  theme_classic()
+
+hip_a2
+
+# convert matrix to numeric 
+
+hip_norm.counts[] <- sapply(hip_norm.counts, as.numeric)
+
+soft_power <- 3
+temp_cor <- cor
+cor <- WGCNA::cor
+
+#memory estimate w.r.t. blocksisze
+bwnet <- blockwiseModules(hip_norm.counts, 
+                 maxBlockSize = 14000,
+                 TOMType = "signed", 
+                 power = soft_power, 
+                 mergeCutHeight = 0.25, 
+                 numericLabels = FALSE,
+                 randomSeed = 1234,
+                 verbose = 3)
+
+cor <- temp_cor
+
+# Moduel Eigengenes
+
+module_eigengenes <- bwnet$MEs
+
+#Print out a preview
+head(module_eigengenes)
+
+#get number of genes for each module
+table(bwnet$colors)
+
+#plot a dendogram and the module colors before and after merging underneath
+plotDendroAndColors(bwnet$dendrograms[[1]], cbind(bwnet$unmergedColors, bwnet$colors),
+                    c("unmerged", "merged"),
+                    dendroLabels = FALSE,
+                    addGuide = TRUE, 
+                    hang = 0.03, 
+                    guideHang = 0.05)
+
+#create a traits file- binarize categorical variables 
+hip_colData_mut <- hip_colData %>%
+  mutate(treatment_state_bin = ifelse(grepl('ethanol', treatment), 1, 0)) %>%
+  mutate(sex_state_bin = ifelse(grepl('female', sex), 1, 0)) %>%
+  dplyr::select(3,4)
+  
+# define numbers of genes and samples
+nSamples <- nrow(hip_norm.counts)
+nGenes <- ncol(hip_norm.counts)
+
+module.trait.corr <- cor(module_eigengenes, hip_colData_mut, use = 'p')
+module.trait.corr.pvals <- corPvalueStudent(module.trait.corr, nSamples)
+
+#visualize module-trait association as a heatmap
+heatmap.data <- merge(module_eigengenes, hip_colData_mut, by = 'row.names')
+
+head(heatmap.data)
+
+hip_colData_mut <- hip_colData_mut %>%
+  column_to_rownames(var = 'id') #this might be wrong 
+
+CorLevelPlot(heatmap.data,
+             x= names(heatmap.data)[24:25],
+             y= names(heatmap.data)[2:23],
+             col = c("blue1", "skyblue", "white", "pink", "red"))
+
+module.gene.mapping <- as.data.frame(bwnet$colors)
+grey_module <- module.gene.mapping %>%
+  filter(`bwnet$colors` == "grey") #filter by color for a specific module 
+  
+
+#grey, lightyellow, and red are all associated with ethanol treatment 
+```
+
+GO analysis of WGCNA modules 
+```{r}
+#tutorials
+#https://lauren-blake.github.io/Explore_WGCNA/Tutorial_1.html
+
+GOenr = GOenrichmentAnalysis(grey_module, allLLIDs, organism = "rat", nBestP = 10);
+
+
+
+```
+
