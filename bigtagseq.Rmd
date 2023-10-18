@@ -72,7 +72,6 @@ all(colnames(hip_counts_data) == rownames(hip_colData))
 #ec data
 all(colnames(ec_counts_data) %in% rownames(ec_colData))
 all(colnames(ec_counts_data) == rownames(ec_colData))
-
 ```
 
 Hippocampus DESeq object 
@@ -81,7 +80,7 @@ Hippocampus DESeq object
 #construct DESeq object 
 hip_dds<- DESeqDataSetFromMatrix(countData = hip_counts_data,
                        colData = hip_colData, 
-                       design = ~treatment + sex)
+                       design = ~treatment)
 hip_dds
 
 resultsNames(hip_dds)
@@ -106,48 +105,82 @@ hip_resOrdered_df$symbol <- mapIds(org.Rn.eg.db, keys = rownames(hip_resOrdered_
 hip_resOrdered_df
 
 #write.csv(hip_resOrdered_df, "~/Documents/R Projects/tag-seq/bigtagseq/hippocampus_big_deg.csv", row.names = TRUE)
-
 ```
 
-DESeq object for sex differences 
+Hippocampus DESeq object treatment + sex
 ```{r}
 #hippocampus 
 #construct DESeq object 
-hip_dds<- DESeqDataSetFromMatrix(countData = hip_counts_data,
+hip_dds_2<- DESeqDataSetFromMatrix(countData = hip_counts_data,
                        colData = hip_colData, 
-                       design = ~treatment + sex + treatment:sex)
-hip_dds
+                       design = ~treatment + sex)
+hip_dds_2
 
-resultsNames(hip_dds)
+resultsNames(hip_dds_2)
 
 #prefiltering, only keeping genes with more than XX reads 
-hip_keep<- rowSums(counts(hip_dds)) >= 10
-hip_dds<- hip_dds[hip_keep,]
-hip_dds
+hip_keep_2<- rowSums(counts(hip_dds_2)) >= 10
+hip_dds_2<- hip_dds_2[hip_keep_2,]
+hip_dds_2
 
-#subset hip_dds to include only samples with ethanol treatment 
-eth_hip_dds <- hip_dds[hip_dds$treatment == "ethanol"]
+#Run DESeq on object.size; use resultNames(hip_dds) to understand the different results we can look for in the dds object 
+hip_dds_2<- DESeq(hip_dds_2)
+hip_res_2 <- results(hip_dds_2, contrast = c("treatment", "ethanol", "control")) #("condition", "level_to_compare", "base_level")
 
-#Run DESeq on object.size
-eth_hip_dds<- DESeq(eth_hip_dds)
-#hip_res <- results(hip_dds, contrast = c(contrast_males <- results(hip_dds, contrast=c("treatment_ethanol_vs_control", "treatmentethanol", "treatmentcontrol", "sexmale"))
-#)) ("condition", "level_to_compare", "base_level")
-#summary(hip_res)
-
-eth_hip_res <- results(eth_hip_dds, contrast=c("sex", "male", "female"))
-
+summary(hip_res_2)
 
 #genes ranked by p-value
-hip_resOrdered <- eth_hip_res[order(eth_hip_res$padj),]
+hip_resOrdered_2 <- hip_res_2[order(hip_res_2$pvalue),]
 
 #gene name annotation
-hip_resOrdered_df <- as.data.frame(hip_resOrdered)
-hip_resOrdered_df$symbol <- mapIds(org.Rn.eg.db, keys = rownames(hip_resOrdered_df), keytype = "ENSEMBL", column = "SYMBOL")
-hip_resOrdered_df
+hip_resOrdered_df_2 <- as.data.frame(hip_resOrdered_2)
+hip_resOrdered_df_2$symbol <- mapIds(org.Rn.eg.db, keys = rownames(hip_resOrdered_df_2), keytype = "ENSEMBL", column = "SYMBOL")
+hip_resOrdered_df_2
+
+count(hip_resOrdered_df_2$pvalue < .05)
 
 #write.csv(hip_resOrdered_df, "~/Documents/R Projects/tag-seq/bigtagseq/hippocampus_big_deg.csv", row.names = TRUE)
 ```
 
+DESeq object with interaction factor 
+```{r}
+#hippocampus 
+#construct DESeq object 
+hip_dds_3<- DESeqDataSetFromMatrix(countData = hip_counts_data,
+                       colData = hip_colData, 
+                       design = ~treatment + sex + treatment:sex)
+hip_dds_3
+
+resultsNames(hip_dds_3)
+
+#prefiltering, only keeping genes with more than XX reads 
+hip_keep_3<- rowSums(counts(hip_dds_3)) >= 10
+hip_dds_3<- hip_dds_3[hip_keep_3,]
+hip_dds_3
+
+#Run DESeq on object.size; use resultNames(hip_dds) to understand the different results we can look for in the dds object 
+hip_dds_3<- DESeq(hip_dds_3)
+hip_res_3 <- results(hip_dds_3, contrast = c("treatment", "ethanol", "control")) #("condition", "level_to_compare", "base_level")
+
+summary(hip_res_3)
+
+#genes ranked by p-value
+hip_resOrdered_3 <- hip_res_3[order(hip_res_3$pvalue),]
+
+#gene name annotation
+hip_resOrdered_df_3 <- as.data.frame(hip_resOrdered_3)
+hip_resOrdered_df_3$symbol <- mapIds(org.Rn.eg.db, keys = rownames(hip_resOrdered_df_3), keytype = "ENSEMBL", column = "SYMBOL")
+
+#saving DEGs filtered by p value as a csv file for analysis outside of r 
+hippo_DEGs <- hip_resOrdered_df_3 %>%
+  filter(pvalue < 0.05) %>%
+  rownames_to_column(var = "ensemblid")
+
+#write.csv(hippo_DEGs$ensemblid, "hippo_DEGs.csv", row.names = FALSE)
+
+
+#write.csv(hip_resOrdered_df, "~/Documents/R Projects/tag-seq/bigtagseq/hippocampus_big_deg.csv", row.names = TRUE)
+```
 
 Hippocampus Males only DDS Object
 ```{r}
@@ -160,28 +193,29 @@ male_hip_dds<- DESeqDataSetFromMatrix(countData = male_hip_counts_data,
                        colData = male_hip_colData, 
                        design = ~ treatment)
 
-#Run DESeq on object.size
-male_hip_dds<- DESeq(male_hip_dds)
-male_hip_res <- results(male_hip_dds)
-summary(male_hip_res)
+#prefiltering, only keeping genes with more than XX reads 
+male_hip_keep<- rowSums(counts(male_hip_dds)) >= 10
+male_hip_dds<- male_hip_dds[male_hip_keep,]
+male_hip_dds
 
-#genes ranked by p-value
+#Run DESeq on object.size; use resultNames(hip_dds) to understand the different results we can look for in the dds object 
+male_hip_dds<- DESeq(male_hip_dds)
+male_hip_res <- results(male_hip_dds, contrast = c("treatment", "ethanol", "control")) #("condition", "level_to_compare", "base_level")
+
+#genes ranked by pvalue
 male_hip_resOrdered <- male_hip_res[order(male_hip_res$pvalue),]
 
-#write.csv(male_hip_resOrdered, "~/Documents/R Projects/tag-seq/bigtagseq/maledata_guerin.csv", row.names=TRUE)
+#gene name annotation
+male_hip_resOrdered_df <- as.data.frame(male_hip_resOrdered)
+male_hip_resOrdered_df$symbol <- mapIds(org.Rn.eg.db, keys = rownames(male_hip_resOrdered_df), keytype = "ENSEMBL", column = "SYMBOL")
+male_hip_resOrdered_df
 
+#saving DEGs filtered by p value as a csv file for analysis outside of r 
+hippo_DEGs_male <- male_hip_resOrdered_df %>%
+  filter(pvalue < 0.05) %>%
+  rownames_to_column(var = "ensemblid")
 
-#tidy version of ordered genes 
-male_hip_res_tidy <- tidy.DESeqResults(male_hip_resOrdered)
-male_hip_res_tidy
-
-#matrix with gene names 
-male_hip_res_tidy %>% 
-    dplyr::arrange(p.adjusted) %>% 
-    head(40) %>% 
-    dplyr::inner_join(rnor6, by = c("gene" = "ensgene")) %>% 
-    dplyr::select(gene, estimate, p.adjusted, symbol, description) %>% 
-    knitr::kable(.)
+#write.csv(hippo_DEGs_male$ensemblid, "male_hippo_DEGs.csv", row.names = FALSE)
 ```
 
 plotting some genes from the males: 
@@ -200,33 +234,33 @@ fem_hip_dds<- DESeqDataSetFromMatrix(countData = fem_hip_counts_data,
                        colData = fem_hip_colData, 
                        design = ~ treatment)
 
-#set a factor level- here we are choosing control
-fem_hip_dds$treatment <- relevel(fem_hip_dds$treatment, ref = "control")
+#prefiltering, only keeping genes with more than XX reads 
+fem_hip_keep<- rowSums(counts(fem_hip_dds)) >= 10
+fem_hip_dds<- fem_hip_dds[fem_hip_keep,]
 
-#Run DESeq on object.size
+#Run DESeq on object.size; use resultNames(hip_dds) to understand the different results we can look for in the dds object 
 fem_hip_dds<- DESeq(fem_hip_dds)
-fem_hip_res <- results(fem_hip_dds)
-summary(fem_hip_res)
+fem_hip_res <- results(fem_hip_dds, contrast = c("treatment", "ethanol", "control")) #("condition", "level_to_compare", "base_level")
 
-#genes ranked by p-value
+#genes ranked by pvalue
 fem_hip_resOrdered <- fem_hip_res[order(fem_hip_res$pvalue),]
 
-#tidy version of ordered genes 
-fem_hip_res_tidy <- tidy.DESeqResults(fem_hip_resOrdered)
-fem_hip_res_tidy
+#gene name annotation
+fem_hip_resOrdered_df <- as.data.frame(fem_hip_resOrdered)
+fem_hip_resOrdered_df$symbol <- mapIds(org.Rn.eg.db, keys = rownames(fem_hip_resOrdered_df), keytype = "ENSEMBL", column = "SYMBOL")
+fem_hip_resOrdered_df
 
-#matrix with gene names 
-fem_hip_res_tidy %>% 
-    dplyr::arrange(p.adjusted) %>% 
-    head(40) %>% 
-    dplyr::inner_join(rnor6, by = c("gene" = "ensgene")) %>% 
-    dplyr::select(gene, estimate, p.adjusted, symbol, description) %>% 
-    knitr::kable(.)
+#saving DEGs filtered by p value as a csv file for analysis outside of r 
+hippo_DEGs_female <- fem_hip_resOrdered_df %>%
+  filter(pvalue < 0.05) %>%
+  rownames_to_column(var = "ensemblid")
+
+write.csv(hippo_DEGs_female$ensemblid, "female_hippo_DEGs.csv", row.names = FALSE)
 ```
 
 plotting some genes from the females: 
 ```{r}
-plotCounts(fem_hip_dds, gene="ENSRNOG00000046834", intgroup="treatment")
+plotCounts(hip_dds, gene="ENSRNOG00000001287", intgroup="treatment")
 ```
 
 Entorhinal Cortex DSeq object 
@@ -235,23 +269,18 @@ Entorhinal Cortex DSeq object
 #construct DESeq object 
 ec_dds<- DESeqDataSetFromMatrix(countData = ec_counts_data,
                        colData = ec_colData, 
-                       design = ~ treatment + sex)
+                       design = ~ treatment + sex + treatment:sex)
 ec_dds
 
 #prefiltering, only keeping genes with more than 10 reads 
 ec_keep<- rowSums(counts(ec_dds)) >= 10
 ec_dds<- ec_dds[ec_keep,]
-ec_dds
-
-#set a factor level- here we are choosing control
-ec_dds$treatment <- relevel(ec_dds$treatment, ref = "control")
 
 #Run DESeq on object.size
 ec_dds<- DESeq(ec_dds)
 ec_res <- results(ec_dds, contrast = c("treatment", "ethanol", "control")) #("condition", "level_to_compare", "base_level")
-summary(ec_res)
 
-#genes ranked by p-value
+#genes ranked by pvalue
 ec_resOrdered <- ec_res[order(ec_res$pvalue),]
 
 #gene name annotation
@@ -259,8 +288,83 @@ ec_resOrdered_df <- as.data.frame(ec_resOrdered)
 ec_resOrdered_df$symbol <- mapIds(org.Rn.eg.db, keys = rownames(ec_resOrdered_df), keytype = "ENSEMBL", column = "SYMBOL")
 ec_resOrdered_df
 
-#write.csv(ec_resOrdered_df, "~/Documents/R Projects/tag-seq/bigtagseq/entorhinal_big_deg.csv", row.names = TRUE)
+ec_DEGs <- ec_resOrdered_df %>%
+  filter(pvalue < 0.05) %>%
+  rownames_to_column(var = "ensemblid")
 
+write.csv(ec_DEGs$ensemblid, "ec_DEGs.csv", row.names = FALSE)
+
+#write.csv(ec_resOrdered_df, "~/Documents/R Projects/tag-seq/bigtagseq/entorhinal_big_deg.csv", row.names = TRUE)
+```
+
+Entorhinal Cortex Males only DDS Object
+```{r}
+male_ec_counts_data <-  ec_counts_data[,c("1_E","10_E", "11_E", "12_E", "13_E", "2_E", "29_E", "30_E", "31_E", "34_E", "35_E", "37_E", "38_E", "39_E", "4_E", "40_E", "5_E", "8_E", "9_E")]
+
+male_ec_colData <- ec_colData%>%
+  filter(sex == "male")
+
+male_ec_dds<- DESeqDataSetFromMatrix(countData = male_ec_counts_data,
+                       colData = male_ec_colData, 
+                       design = ~ treatment)
+
+#prefiltering, only keeping genes with more than XX reads 
+male_ec_keep<- rowSums(counts(male_ec_dds)) >= 10
+male_ec_dds<- male_ec_dds[male_ec_keep,]
+
+#Run DESeq on object.size; use resultNames(ec_dds) to understand the different results we can look for in the dds object 
+male_ec_dds<- DESeq(male_ec_dds)
+male_ec_res <- results(male_ec_dds, contrast = c("treatment", "ethanol", "control")) #("condition", "level_to_compare", "base_level")
+
+#genes ranked by pvalue
+fem_ec_resOrdered <- fem_ec_res[order(fem_ec_res$pvalue),]
+
+#gene name annotation
+male_ec_resOrdered_df <- as.data.frame(male_ec_resOrdered)
+male_ec_resOrdered_df$symbol <- mapIds(org.Rn.eg.db, keys = rownames(male_ec_resOrdered_df), keytype = "ENSEMBL", column = "SYMBOL")
+male_ec_resOrdered_df
+
+#saving DEGs filtered by p value as a csv file for analysis outside of r 
+ec_DEGs_male <- male_ec_resOrdered_df %>%
+  filter(pvalue < 0.05) %>%
+  rownames_to_column(var = "ensemblid")
+
+write.csv(ec_DEGs_male$ensemblid, "male_ec_DEGs.csv", row.names = FALSE)
+```
+
+Entorhinal Cortex Females only DDS Object
+```{r}
+fem_ec_counts_data <-  ec_counts_data[,c("16_E","17_E", "18_E", "19_E", "21_E", "22_E", "23_E", "24_E", "25_E", "28_E", "41_E", "43_E", "44_E", "45_E", "46_E", "47_E", "48_E", "49_E", "50_E", "52_E")]
+
+fem_ec_colData <- ec_colData%>%
+  filter(sex == "female")
+
+fem_ec_dds<- DESeqDataSetFromMatrix(countData = fem_ec_counts_data,
+                       colData = fem_ec_colData, 
+                       design = ~ treatment)
+
+#prefiltering, only keeping genes with more than XX reads 
+fem_ec_keep<- rowSums(counts(fem_ec_dds)) >= 10
+fem_ec_dds<- fem_ec_dds[fem_ec_keep,]
+
+#Run DESeq on object.size; use resultNames(ec_dds) to understand the different results we can look for in the dds object 
+fem_ec_dds<- DESeq(fem_ec_dds)
+fem_ec_res <- results(fem_ec_dds, contrast = c("treatment", "ethanol", "control")) #("condition", "level_to_compare", "base_level")
+
+#genes ranked by pvalue
+fem_ec_resOrdered <- fem_ec_res[order(fem_ec_res$pvalue),]
+
+#gene name annotation
+fem_ec_resOrdered_df <- as.data.frame(fem_ec_resOrdered)
+fem_ec_resOrdered_df$symbol <- mapIds(org.Rn.eg.db, keys = rownames(fem_ec_resOrdered_df), keytype = "ENSEMBL", column = "SYMBOL")
+fem_ec_resOrdered_df
+
+#saving DEGs filtered by p value as a csv file for analysis outside of r 
+ec_DEGs_female <- fem_ec_resOrdered_df %>%
+  filter(pvalue < 0.05) %>%
+  rownames_to_column(var = "ensemblid")
+
+write.csv(ec_DEGs_female$ensemblid, "female_ec_DEGs.csv", row.names = FALSE)
 ```
 
 plotting some genes: 
@@ -317,18 +421,18 @@ plotPCA(ec_vsd, intgroup=c("treatment", "sex"))
 
 Volcano Plots
 ```{r}
-#hippocampus  
-EnhancedVolcano(hip_resOrdered_df,
-  lab = hip_resOrdered_df$symbol,
+#hippocampus model with ~treatment + sex + treatment:sex
+EnhancedVolcano(hip_resOrdered_df_3,
+  lab = hip_resOrdered_df_3$symbol,
   x = 'log2FoldChange',
-  y = 'padj',
+  y = 'pvalue',
   boxedLabels = TRUE,
   drawConnectors = TRUE,
   pCutoff = 0.05, 
   FCcutoff = 0.1,
   xlim = c(-0.5, 0.5),
   ylim = c(0, 4.5),
-  title = "Hippocampus",
+  title = "Hippocampus- ~treatment + sex + treatment:sex",
   legendPosition = 'none',
   subtitle = "Differential Expresion"
 )
@@ -337,7 +441,7 @@ EnhancedVolcano(hip_resOrdered_df,
 EnhancedVolcano(ec_resOrdered_df,
   lab = ec_resOrdered_df$symbol,
   x = 'log2FoldChange',
-  y = 'padj', 
+  y = 'pvalue', 
   boxedLabels = TRUE,
   drawConnectors = TRUE,
   pCutoff = 0.05, 
@@ -359,7 +463,7 @@ hip_genelist<- counts(hip_dds, normalized = TRUE)%>%
   tibble::rownames_to_column(var = "ENSEMBL")%>% #converting row name to a column 
   mutate(symbol = mapIds(org.Rn.eg.db, keys = ENSEMBL, keytype = "ENSEMBL", column = "SYMBOL"))%>%
   subset(select = -ENSEMBL)%>%
-  filter(symbol %in% c("Clu","Gfap", "Apln", "Lxn", "Grin2c", "Aqp4", "Pltp", "Htra1"))
+  filter(symbol %in% c("Clu","Gfap", "Apln", "Lxn", "Grin2c", "Aqp4", "Pltp", "Htra1", "Esr1", "Esr2"))
 
 hip_genelist
 
@@ -379,6 +483,23 @@ gfapgene<- hip_genelist%>%
   tibble::rownames_to_column(var = "id")%>%
   {colnames(.)[2] <- "count"; .}%>%
   full_join(hip_colData2, by = "id")
+
+esr1<- hip_genelist%>%
+  filter(symbol == "Esr1")%>%
+  subset(select = -symbol)%>% #get rid of the symbol column
+  t()%>% #transpose
+  as.data.frame() %>%
+  tibble::rownames_to_column(var = "id")%>%
+  {colnames(.)[2] <- "count"; .}%>%
+  full_join(hip_colData2, by = "id")
+
+esr1graph <- ggboxplot(esr1, "sex", "count",
+               color = "treatment", 
+               add = "jitter",
+               main = "Esr1 Normalized Counts",
+               palette = "jco") 
+
+esr1graph
 
 #anovas
 gfapmodel <- lm(count ~ sex * treatment, data = gfapgene)
