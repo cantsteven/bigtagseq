@@ -26,7 +26,8 @@ library(emmeans) #for anovas
 library(CorLevelPlot) #devtools::install_github("kevinblighe/CorLevelPlot")
 library(GO.db) #to install: BiocManager::install("GO.db") ;this is for go analysis 
 library(AnnotationDbi) #to install: BiocManager::install("AnnotationDbi")
-
+library(matrixStats)
+library(ggthemes)
 
 #formatting files 
 
@@ -104,6 +105,7 @@ hip_resOrdered_df <- as.data.frame(hip_resOrdered)
 hip_resOrdered_df$symbol <- mapIds(org.Rn.eg.db, keys = rownames(hip_resOrdered_df), keytype = "ENSEMBL", column = "SYMBOL")
 hip_resOrdered_df
 
+
 #write.csv(hip_resOrdered_df, "~/Documents/R Projects/tag-seq/bigtagseq/hippocampus_big_deg.csv", row.names = TRUE)
 ```
 
@@ -137,7 +139,9 @@ hip_resOrdered_df_2 <- as.data.frame(hip_resOrdered_2)
 hip_resOrdered_df_2$symbol <- mapIds(org.Rn.eg.db, keys = rownames(hip_resOrdered_df_2), keytype = "ENSEMBL", column = "SYMBOL")
 hip_resOrdered_df_2
 
-count(hip_resOrdered_df_2$pvalue < .05)
+hippo_DEGs <- hip_resOrdered_df_2 %>%
+  filter(padj < 0.1) %>%
+  rownames_to_column(var = "ensemblid")
 
 #write.csv(hip_resOrdered_df, "~/Documents/R Projects/tag-seq/bigtagseq/hippocampus_big_deg.csv", row.names = TRUE)
 ```
@@ -167,25 +171,35 @@ summary(hip_res_3)
 #genes ranked by p-value
 hip_resOrdered_3 <- hip_res_3[order(hip_res_3$pvalue),]
 
+#filtering genes by log fold change 
+hip_resOrdered_3 <- hip_resOrdered_3[abs(hip_resOrdered_3$log2FoldChange) > 0.2, ]
+head(hip_resOrdered_3)
+
 #gene name annotation
 hip_resOrdered_df_3 <- as.data.frame(hip_resOrdered_3)
 hip_resOrdered_df_3$symbol <- mapIds(org.Rn.eg.db, keys = rownames(hip_resOrdered_df_3), keytype = "ENSEMBL", column = "SYMBOL")
 
 #saving DEGs filtered by p value as a csv file for analysis outside of r 
 hippo_DEGs <- hip_resOrdered_df_3 %>%
-  filter(pvalue < 0.05) %>%
+  filter(pvalue < 0.1) %>%
   rownames_to_column(var = "ensemblid")
 
-#write.csv(hippo_DEGs$ensemblid, "hippo_DEGs.csv", row.names = FALSE)
-
-
-#write.csv(hip_resOrdered_df, "~/Documents/R Projects/tag-seq/bigtagseq/hippocampus_big_deg.csv", row.names = TRUE)
+#write.csv(hippo_DEGs, "~/Documents/R Projects/tag-seq/bigtagseq/hippo_degs.csv", row.names = TRUE)
 ```
 
 Hippocampus Males only DDS Object
 ```{r}
 male_hip_counts_data <-  hip_counts_data[,c("1_H","10_H", "11_H", "12_H", "13_H", "2_H", "29_H", "30_H", "31_H", "34_H", "37_H", "38_H", "39_H", "4_H", "40_H", "5_H", "8_H", "9_H")]
 
+#filtering for variance 
+#quantile(male_hip_counts_data$rowvariance, probs = 0.75)
+male_hip_counts_data <- male_hip_counts_data %>%
+    mutate(rowvariance = rowVars(as.matrix(male_hip_counts_data))) %>%
+    filter(rowvariance > 250) 
+
+#removing the variance column   
+male_hip_counts_data <- male_hip_counts_data[, -19]
+    
 male_hip_colData <- hip_colData%>%
   filter(sex == "male")
 
@@ -205,6 +219,10 @@ male_hip_res <- results(male_hip_dds, contrast = c("treatment", "ethanol", "cont
 #genes ranked by pvalue
 male_hip_resOrdered <- male_hip_res[order(male_hip_res$pvalue),]
 
+#filtering genes by log fold change 
+#male_hip_resOrdered <- male_hip_resOrdered[abs(male_hip_resOrdered$log2FoldChange) > 0.2, ]
+#head(hip_resOrdered_3)
+
 #gene name annotation
 male_hip_resOrdered_df <- as.data.frame(male_hip_resOrdered)
 male_hip_resOrdered_df$symbol <- mapIds(org.Rn.eg.db, keys = rownames(male_hip_resOrdered_df), keytype = "ENSEMBL", column = "SYMBOL")
@@ -212,8 +230,10 @@ male_hip_resOrdered_df
 
 #saving DEGs filtered by p value as a csv file for analysis outside of r 
 hippo_DEGs_male <- male_hip_resOrdered_df %>%
-  filter(pvalue < 0.05) %>%
+  filter(padj < 0.1) %>%
   rownames_to_column(var = "ensemblid")
+
+hippo_DEGs_male 
 
 #write.csv(hippo_DEGs_male$ensemblid, "male_hippo_DEGs.csv", row.names = FALSE)
 ```
@@ -245,6 +265,9 @@ fem_hip_res <- results(fem_hip_dds, contrast = c("treatment", "ethanol", "contro
 #genes ranked by pvalue
 fem_hip_resOrdered <- fem_hip_res[order(fem_hip_res$pvalue),]
 
+#filtering genes by log fold change 
+fem_hip_resOrdered <- fem_hip_resOrdered[abs(fem_hip_resOrdered$log2FoldChange) > 0.2, ]
+
 #gene name annotation
 fem_hip_resOrdered_df <- as.data.frame(fem_hip_resOrdered)
 fem_hip_resOrdered_df$symbol <- mapIds(org.Rn.eg.db, keys = rownames(fem_hip_resOrdered_df), keytype = "ENSEMBL", column = "SYMBOL")
@@ -252,10 +275,10 @@ fem_hip_resOrdered_df
 
 #saving DEGs filtered by p value as a csv file for analysis outside of r 
 hippo_DEGs_female <- fem_hip_resOrdered_df %>%
-  filter(pvalue < 0.05) %>%
+  filter(padj < 0.05) %>%
   rownames_to_column(var = "ensemblid")
 
-write.csv(hippo_DEGs_female$ensemblid, "female_hippo_DEGs.csv", row.names = FALSE)
+#write.csv(hippo_DEGs_female$ensemblid, "female_hippo_DEGs.csv", row.names = FALSE)
 ```
 
 plotting some genes from the females: 
@@ -317,7 +340,10 @@ male_ec_dds<- DESeq(male_ec_dds)
 male_ec_res <- results(male_ec_dds, contrast = c("treatment", "ethanol", "control")) #("condition", "level_to_compare", "base_level")
 
 #genes ranked by pvalue
-fem_ec_resOrdered <- fem_ec_res[order(fem_ec_res$pvalue),]
+male_ec_resOrdered <- male_ec_res[order(male_ec_res$pvalue),]
+
+#filtering genes by log fold change 
+male_ec_resOrdered <- male_ec_resOrdered[abs(male_ec_resOrdered$log2FoldChange) > 0.2, ]
 
 #gene name annotation
 male_ec_resOrdered_df <- as.data.frame(male_ec_resOrdered)
@@ -354,6 +380,9 @@ fem_ec_res <- results(fem_ec_dds, contrast = c("treatment", "ethanol", "control"
 #genes ranked by pvalue
 fem_ec_resOrdered <- fem_ec_res[order(fem_ec_res$pvalue),]
 
+#filtering genes by log fold change 
+fem_ec_resOrdered <- fem_ec_resOrdered[abs(fem_ec_resOrdered$log2FoldChange) > 0.2, ]
+
 #gene name annotation
 fem_ec_resOrdered_df <- as.data.frame(fem_ec_resOrdered)
 fem_ec_resOrdered_df$symbol <- mapIds(org.Rn.eg.db, keys = rownames(fem_ec_resOrdered_df), keytype = "ENSEMBL", column = "SYMBOL")
@@ -369,16 +398,15 @@ write.csv(ec_DEGs_female$ensemblid, "female_ec_DEGs.csv", row.names = FALSE)
 
 plotting some genes: 
 ```{r}
-plotCounts(hip_dds, gene="ENSRNOT00055029092", intgroup="treatment")
+gfaphip <- plotCounts(hip_dds, gene="ENSRNOG00000002919", intgroup="treatment")
 
-plotCounts(ec_dds, gene="ENSRNOT00000104106", intgroup="treatment")
+#plotCounts(ec_dds, gene="ENSRNOG00000002919", intgroup="treatment")
 
-#ggplot(d, aes(x=sex, y = count))+ 
-  #geom_jitter()+ 
-  #geom_boxplot(alpha = 0.5)+ 
-  #labs(title = "ubiquitously transcribed tetratricopeptide repeat containing, Y-linked")+ 
-  #ylab("normalized count")
-!((51))
+ggplot(gfaphip, aes(x=sex, y = count))+ 
+  geom_jitter()+ 
+  geom_boxplot(alpha = 0.5)+ 
+  labs(title = "GFAP")+ 
+  ylab("normalized count")
 ```
 
 MA Plots
@@ -458,7 +486,7 @@ EnhancedVolcano(ec_resOrdered_df,
 Gene count graphs by region 
 ```{r}
 #extracting the counts for genes of interest 
-hip_genelist<- counts(hip_dds, normalized = TRUE)%>%
+hip_genelist<- counts(hip_dds, normalized = FALSE)%>%
   as.data.frame()%>%
   tibble::rownames_to_column(var = "ENSEMBL")%>% #converting row name to a column 
   mutate(symbol = mapIds(org.Rn.eg.db, keys = ENSEMBL, keytype = "ENSEMBL", column = "SYMBOL"))%>%
@@ -483,23 +511,6 @@ gfapgene<- hip_genelist%>%
   tibble::rownames_to_column(var = "id")%>%
   {colnames(.)[2] <- "count"; .}%>%
   full_join(hip_colData2, by = "id")
-
-esr1<- hip_genelist%>%
-  filter(symbol == "Esr1")%>%
-  subset(select = -symbol)%>% #get rid of the symbol column
-  t()%>% #transpose
-  as.data.frame() %>%
-  tibble::rownames_to_column(var = "id")%>%
-  {colnames(.)[2] <- "count"; .}%>%
-  full_join(hip_colData2, by = "id")
-
-esr1graph <- ggboxplot(esr1, "sex", "count",
-               color = "treatment", 
-               add = "jitter",
-               main = "Esr1 Normalized Counts",
-               palette = "jco") 
-
-esr1graph
 
 #anovas
 gfapmodel <- lm(count ~ sex * treatment, data = gfapgene)
@@ -550,10 +561,102 @@ aqp4countsgraph
 
 
 ggarrange(gfapcountsgraph, aqp4countsgraph, ncol = 2, common.legend = TRUE)
-
-
 ```
 
+
+GFAP gene counts for poster 
+```{r}
+#extracting the counts for genes of interest 
+hip_genelist<- counts(hip_dds, normalized = FALSE)%>%
+  as.data.frame()%>%
+  tibble::rownames_to_column(var = "ENSEMBL")%>% #converting row name to a column 
+  mutate(symbol = mapIds(org.Rn.eg.db, keys = ENSEMBL, keytype = "ENSEMBL", column = "SYMBOL"))%>%
+  subset(select = -ENSEMBL)%>%
+  filter(symbol %in% c("Clu","Gfap", "Apln", "Lxn", "Grin2c", "Aqp4", "Pltp", "Htra1", "Esr1", "Esr2"))
+
+hip_genelist
+
+#modyfing hip_colData so that the the rownames is a column 
+hip_colData2 <- hip_colData%>%
+  tibble::rownames_to_column(var = "id")
+
+hip_colData2
+
+#extracting the counts for genes of interest EC
+ec_genelist<- counts(ec_dds, normalized = FALSE)%>%
+  as.data.frame()%>%
+  tibble::rownames_to_column(var = "ENSEMBL")%>% #converting row name to a column 
+  mutate(symbol = mapIds(org.Rn.eg.db, keys = ENSEMBL, keytype = "ENSEMBL", column = "SYMBOL"))%>%
+  subset(select = -ENSEMBL)%>%
+  filter(symbol %in% c("Clu","Gfap", "Apln", "Lxn", "Grin2c", "Aqp4", "Pltp", "Htra1", "Esr1", "Esr2"))
+
+ec_genelist
+
+#modyfing hip_colData so that the the rownames is a column 
+ec_colData2 <- ec_colData%>%
+  tibble::rownames_to_column(var = "id")
+
+ec_colData2
+
+#Gfap Hip
+#data frame
+gfapgene<- hip_genelist%>%
+  filter(symbol == "Gfap")%>%
+  subset(select = -symbol)%>% #get rid of the symbol column
+  t()%>% #transpose
+  as.data.frame() %>%
+  tibble::rownames_to_column(var = "id")%>%
+  {colnames(.)[2] <- "count"; .}%>%
+  full_join(hip_colData2, by = "id")
+
+#anovas
+gfapmodel <- lm(count ~ sex * treatment, data = gfapgene)
+gfapanova <- anova(gfapmodel)
+gfapanova
+
+emmeans(gfapmodel, pairwise ~ sex + treatment)
+
+#graph 
+gfapcountsgraph <- ggplot(gfapgene, aes(x = sex, y = count, color = treatment)) + 
+  geom_boxplot() + 
+  geom_jitter(position = position_jitterdodge()) + 
+  scale_fill_manual(values = c("#00AFBB", "#E7B800"))+
+  scale_color_manual(values = c("#00AFBB", "#E7B800"))+
+  theme_minimal() 
+
+gfapcountsgraph
+
+#Gfap EC
+#data frame
+gfapgeneec<- ec_genelist%>%
+  filter(symbol == "Gfap")%>%
+  subset(select = -symbol)%>% #get rid of the symbol column
+  t()%>% #transpose
+  as.data.frame() %>%
+  tibble::rownames_to_column(var = "id")%>%
+  {colnames(.)[2] <- "count"; .}%>%
+  full_join(ec_colData2, by = "id")
+
+#anovas
+gfapmodelec <- lm(count ~ sex * treatment, data = gfapgeneec)
+gfapanovaec <- anova(gfapmodelec)
+gfapanovaec
+
+emmeans(gfapmodelec, pairwise ~ sex + treatment)
+
+#graph 
+gfapcountsgraphec <- ggplot(gfapgeneec, aes(x = sex, y = count, color = treatment)) + 
+  geom_boxplot() + 
+  geom_jitter(position = position_jitterdodge()) + 
+  scale_fill_manual(values = c("#00AFBB", "#E7B800"))+
+  scale_color_manual(values = c("#00AFBB", "#E7B800"))+
+  theme_minimal()  
+
+gfapcountsgraphec
+
+
+ggarrange(gfapcountsgraph, gfapcountsgraphec, ncol = 2, common.legend = TRUE)
+```
 Heatmaps
 ```{r}
 #Hippocampus
