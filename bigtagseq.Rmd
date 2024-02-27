@@ -1037,7 +1037,7 @@ ec_heatmap<- pheatmap(
 
 ```
 
-WGCNA
+WGCNA Hippocampus
 
 ```{r}
 ##Tutorials:
@@ -1197,13 +1197,35 @@ CorLevelPlot(heatmap.data,
              y= names(heatmap.data)[2:18],
              col = c("blue1", "skyblue", "white", "pink", "red"))
 
-#gray module genes------------------------------------------------------------------ 
-yellow_module <- module.gene.mapping %>%
-  filter(`bwnet$colors` == "yellow") %>% #filter by color for a specific module 
+hip_eigengenes <- module_eigengenes #renaming this df to make it hippocampus specific
+
+#salmon module genes------------------------------------------------------------------ 
+salmon_module <- module.gene.mapping %>%
+  filter(`bwnet$colors` == "salmon") %>% #filter by color for a specific module 
   rownames()
 
-gene_symbols_yellow <- mapIds(org.Rn.eg.db, keys=yellow_module, column="SYMBOL", keytype="ENSEMBL")
-write_lines(gene_symbols_yellow, "yellow_symbols.txt")
+gene_symbols_salmon <- mapIds(org.Rn.eg.db, keys=salmon_module, column="SYMBOL", keytype="ENSEMBL")
+write_lines(gene_symbols_salmon, "salmon_symbols.txt")
+
+#salmon eigengene data frame 
+salmon_hip_eigengene <- hip_eigengenes %>%
+  select(MEsalmon) %>%
+  merge(hip_colData, by = 0) %>%
+  rename(ID = Row.names) %>%
+  rename(value = 2) %>%
+  mutate(ID = as.character(ID)) %>% #needed to change ID to character
+  arrange(treatment, sex) 
+
+salmon_hip_eigengene$ID <- factor(salmon_hip_eigengene$ID, levels = salmon_hip_eigengene$ID)
+#factoring ID so that ggplot with graph it in order 
+
+#salmon eigengene graph
+ggplot(data = salmon_hip_eigengene, aes(x = ID, y = value, fill = treatment, color = sex)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("ethanol" = "yellow", "control" = "aquamarine")) +
+  scale_color_manual(values = c("male" = "blue", "female" = "red")) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  labs(title = "salmon module")
 
 #red module genes------------------------------------------------------------------ 
 midnightblue_module <- module.gene.mapping %>% #astrocyte related 
@@ -1213,6 +1235,26 @@ midnightblue_module <- module.gene.mapping %>% #astrocyte related
 gene_symbols_midnightblue <- mapIds(org.Rn.eg.db, keys=midnightblue_module, column="SYMBOL", keytype="ENSEMBL")
 write_lines(gene_symbols_midnightblue, "midnightblue_symbols.txt")
 
+#midnightblue eigengene data frame 
+midnightblue_hip_eigengene <- hip_eigengenes %>%
+  select(MEmidnightblue) %>%
+  merge(hip_colData, by = 0) %>%
+  rename(ID = Row.names) %>%
+  rename(value = 2) %>%
+  mutate(ID = as.character(ID)) %>% #needed to change ID to character
+  arrange(treatment, sex) 
+
+midnightblue_hip_eigengene$ID <- factor(midnightblue_hip_eigengene$ID, levels = midnightblue_hip_eigengene$ID)
+#factoring ID so that ggplot with graph it in order 
+
+#midnightblue eigengene graph
+ggplot(data = midnightblue_hip_eigengene, aes(x = ID, y = value, fill = treatment, color = sex)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("ethanol" = "yellow", "control" = "aquamarine")) +
+  scale_color_manual(values = c("male" = "blue", "female" = "red")) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  labs(title = "midnightblue module")
+
 #red module genes------------------------------------------------------------------ 
 red_module <- module.gene.mapping %>%
   filter(`bwnet$colors` == "red") %>% #filter by color for a specific module 
@@ -1221,6 +1263,25 @@ red_module <- module.gene.mapping %>%
 gene_symbols_red <- mapIds(org.Rn.eg.db, keys=red_module, column="SYMBOL", keytype="ENSEMBL")
 write_lines(gene_symbols_red, "red_symbols.txt")
 
+#red eigengene data frame 
+red_hip_eigengene <- hip_eigengenes %>%
+  select(MEred) %>%
+  merge(hip_colData, by = 0) %>%
+  rename(ID = Row.names) %>%
+  rename(value = 2) %>%
+  mutate(ID = as.character(ID)) %>% #needed to change ID to character
+  arrange(treatment, sex) 
+
+red_hip_eigengene$ID <- factor(red_hip_eigengene$ID, levels = red_hip_eigengene$ID)
+#factoring ID so that ggplot with graph it in order 
+
+#red eigengene graph 
+ggplot(data = red_hip_eigengene, aes(x = ID, y = value, fill = treatment, color = sex)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("ethanol" = "yellow", "control" = "aquamarine")) +
+  scale_color_manual(values = c("male" = "blue", "female" = "red")) + 
+  labs(title = "red module")
+
 #I uploaded the text files into webgestalt (network topology based analysis)
 #Enrichr is the other good tool (both are web based)
 #Panglao for cell types 
@@ -1228,7 +1289,7 @@ write_lines(gene_symbols_red, "red_symbols.txt")
 #GO biological process for process 
 ```
 
-WGCNA for males in hippocampus
+WGCNA for entorhinal cortex 
 
 ```{r}
 ##Tutorials:
@@ -1237,7 +1298,7 @@ WGCNA for males in hippocampus
 #https://wikis.utexas.edu/display/bioiteam/Clustering+using+WGCNA
 
 #detect outlier genes---------------------------------------------------------------
-gsg<- goodSamplesGenes(t(male_hip_counts_data))
+gsg<- goodSamplesGenes(t(ec_counts_data))
 summary(gsg)
 gsg$allOK #result is false- so there are outliers. we need to find these genes and exclude from analysis 
 
@@ -1245,14 +1306,14 @@ table(gsg$goodGenes)
 table(gsg$goodSamples)
 
 #remove genes that are detected as outliers
-data_nooutlier <- male_hip_counts_data[gsg$goodGenes == TRUE,]
+data_nooutlier <- ec_counts_data[gsg$goodGenes == TRUE,]
 
-#remove outlier samples - hierarchical clustering (method 1)
+#remove outlier samples - hierarchical clustering (method 1) (none found)
 htree <- hclust(dist(t(data_nooutlier)), method = "average")
 plot(htree)
 
 #pca- method 2 for identifying outliers. Check for outliers (none found)
-pca <- prcomp(t(hip_counts_data))
+pca <- prcomp(t(ec_counts_data))
 pca.dat <- pca$x
 
 pca.var <- pca$sdev^2
@@ -1270,72 +1331,72 @@ ggplot(pca.dat, aes(PC1, PC2)) +
 # Normalization with DESeq------------------------------------------------------
 #expression data needs to be normalized 
 #ensuring ronames and column names are identical
-all(rownames(male_hip_colData) %in% colnames(data_nooutlier))
-all(rownames(male_hip_colData) == colnames(data_nooutlier))
+all(rownames(ec_colData) %in% colnames(data_nooutlier))
+all(rownames(ec_colData) == colnames(data_nooutlier))
 
 #create dds 
-hip_dds2 <- DESeqDataSetFromMatrix(countData = data_nooutlier, 
-                                   colData = male_hip_colData, 
+ec_dds2 <- DESeqDataSetFromMatrix(countData = data_nooutlier, 
+                                   colData = ec_colData, 
                                    design = ~1) #do not specify a model 
 
-#remove all genes with counts > 15 in more than 75% of samples (38 * 0.75 = ~29)
-hip_dds_75 <- hip_dds2[rowSums(counts(hip_dds2) >= 15) >= 14,]
-nrow(hip_dds_75) #9540 genes left 
+#remove all genes with counts less than 15 in more than 75% of samples (38 * 0.75 = ~29)
+ec_dds_75 <- ec_dds2[rowSums(counts(ec_dds2) >= 15) >= 29,]
+nrow(ec_dds_75) #9540 genes left 
 
 #perform variance stabilization
-hip_dds_norm <- vst(hip_dds_75)
+ec_dds_norm <- vst(ec_dds_75)
 
 #get normalized counts
-hip_norm.counts <- assay(hip_dds_norm) %>%
+ec_norm.counts <- assay(ec_dds_norm) %>%
   t()
 
 # Understanding soft power----------------------------------------------------------------
 power <- c(c(1:10), seq(from = 12, to = 50, by = 2))
 
 #call the network topology analysis function 
-hip_sft <- pickSoftThreshold(hip_norm.counts, 
+ec_sft <- pickSoftThreshold(ec_norm.counts, 
                   powerVector = power, 
                   networkType = "signed",
                   verbose = 5)
 
-hip_sft.data <- hip_sft$fitIndices
+ec_sft.data <- ec_sft$fitIndices
 
 #visualization to pick power
-hip_a1 <- ggplot(hip_sft.data, aes(Power, SFT.R.sq, label = Power)) + 
+ec_a1 <- ggplot(ec_sft.data, aes(Power, SFT.R.sq, label = Power)) + 
   geom_point() + 
   geom_text(nudge_y = 0.1) + 
   geom_hline(yintercept = 0.8, color = 'red') + 
   labs(x= 'Power', y = 'Scale free topology model fit, signed R^2') + 
   theme_classic()
 
-hip_a1
+ec_a1
 
 #you want to choose a power that has a value just higher than 0.8 R^2
 #in our instance soft power would be 4- this may be too low though based on my reading
 
 #visualization for mean connectivity 
-hip_a2 <- ggplot(hip_sft.data, aes(Power, mean.k., label= Power)) + 
+ec_a2 <- ggplot(ec_sft.data, aes(Power, mean.k., label= Power)) + 
   geom_point() + 
   geom_text(nudge_y = 0.1) + 
   labs(x= 'Power', y = 'Mean Connectivity') + 
   theme_classic()
 
-hip_a2
+ec_a2
 
 
 # convert matrix to numeric -----------------------------------------------------------
-hip_norm.counts[] <- sapply(hip_norm.counts, as.numeric)
+ec_norm.counts[] <- sapply(ec_norm.counts, as.numeric)
 
-soft_power <- 10 #enter soft power here 
+soft_power <- 4 #enter soft power here 
 temp_cor <- cor
 cor <- WGCNA::cor
 
 #memory estimate w.r.t. blocksisze
-bwnet <- blockwiseModules(hip_norm.counts, 
+bwnet <- blockwiseModules(ec_norm.counts, 
                  maxBlockSize = 14000, #size of block relates to how much ram you have, 5000 per 4 gb
                  TOMType = "signed", 
                  power = soft_power, 
-                 mergeCutHeight = 0.4, #threshold to merge similar modules 
+                 mergeCutHeight = 0.25, #threshold to merge similar modules 
                  numericLabels = FALSE, #going by colors instead of numbers
                  randomSeed = 1234,
                  verbose = 3)
@@ -1364,70 +1425,116 @@ plotDendroAndColors(bwnet$dendrograms[[1]], cbind(bwnet$unmergedColors, bwnet$co
 #create a traits file- binarize categorical variables -------------------------------------------
 #next we want to see which traits related to either treatment or sex 
 #so we have to binarize the variables, ethanol will be 1, and female will be 1
-hip_colData_mut <- male_hip_colData %>%
+ec_colData_mut <- ec_colData %>%
   mutate(treatment_state_bin = ifelse(grepl('ethanol', treatment), 1, 0)) %>%
-  #mutate(sex_state_bin = ifelse(grepl('female', sex), 1, 0)) %>%
-  dplyr::select(3)
+  mutate(sex_state_bin = ifelse(grepl('female', sex), 1, 0)) %>%
+  dplyr::select(3,4)
   
 # define numbers of genes and samples
-nSamples <- nrow(hip_norm.counts)
-nGenes <- ncol(hip_norm.counts)
+nSamples <- nrow(ec_norm.counts)
+nGenes <- ncol(ec_norm.counts)
 
-module.trait.corr <- cor(module_eigengenes, hip_colData_mut, use = 'p')
+module.trait.corr <- cor(module_eigengenes, ec_colData_mut, use = 'p')
 module.trait.corr.pvals <- corPvalueStudent(module.trait.corr, nSamples)
 
 #visualize module-trait association as a heatmap
-heatmap.data <- merge(module_eigengenes, hip_colData_mut, by = 'row.names')
+heatmap.data <- merge(module_eigengenes, ec_colData_mut, by = 'row.names')
 
 head(heatmap.data)
 names(heatmap.data)
 #put the treatment and sex bins into x, and the range of rows for the modules into y
 
 CorLevelPlot(heatmap.data,
-             x= names(heatmap.data)[17],
-             y= names(heatmap.data)[2:16],
+             x= names(heatmap.data)[16:17],
+             y= names(heatmap.data)[2:15],
              col = c("blue1", "skyblue", "white", "pink", "red"))
 
-#gray module genes------------------------------------------------------------------ 
-module.gene.mapping <- as.data.frame(bwnet$colors)
-grey_module <- module.gene.mapping %>%
-  filter(`bwnet$colors` == "grey") %>% #filter by color for a specific module 
-  rownames()
-  
-write_lines(grey_module, "grey_module.txt")
+ec_eigengenes <- module_eigengenes #renaming this df to make it ec specific
 
-#converting to gene symbols
-gene_symbols_gray <- mapIds(org.Rn.eg.db, keys=grey_module, column="SYMBOL", keytype="ENSEMBL")
-write_lines(gene_symbols_gray, "grey_module_symbols.txt")
-
-#red module genes- this one seems to be the most astrocyte related--------- 
-red_module <- module.gene.mapping %>%
-  filter(`bwnet$colors` == "red") %>% #filter by color for a specific module 
-  rownames()
-  
-# write_lines(lightyellow_module, "red_module.txt")
-# write.csv(lightyellow_module, "lightyellow_module.csv")
-
-#converting to gene symbols
-gene_symbols_red <- mapIds(org.Rn.eg.db, keys=red_module, column="SYMBOL", keytype="ENSEMBL")
-write_lines(gene_symbols_red, "red_module_symbols.txt")
-
-#I uploaded the text files into webgestalt (network topology based analysis)
-#Enrichr is the other good tool (both are web based)
-#Panglao for cell types 
-#Bioplanet 2019 for pathways 
-#GO biological process for process 
-
-#red module genes------------------------------------------------------------------ 
-yellow_module <- module.gene.mapping %>%
-  filter(`bwnet$colors` == "yellow") %>% #filter by color for a specific module 
+#green yellow module genes--------------------------------------------------------
+greenyellow_module <- module.gene.mapping %>%
+  filter(`bwnet$colors` == "greenyellow") %>% #filter by color for a specific module 
   rownames()
 
-gene_symbols_yellow <- mapIds(org.Rn.eg.db, keys=yellow_module, column="SYMBOL", keytype="ENSEMBL")
-write_lines(gene_symbols_yellow, "yellow_symbols.txt")
+gene_symbols_greenyellow <- mapIds(org.Rn.eg.db, keys=greenyellow_module, column="SYMBOL", keytype="ENSEMBL")
+write_lines(gene_symbols_greenyellow, "greenyellow_symbols.txt")
 
+#greenyellow eigengene data frame 
+greenyellow_ec_eigengene <- ec_eigengenes %>%
+  select(MEgreenyellow) %>%
+  merge(ec_colData, by = 0) %>%
+  rename(ID = Row.names) %>%
+  rename(value = 2) %>%
+  mutate(ID = as.character(ID)) %>% #needed to change ID to character
+  arrange(treatment, sex) 
 
-#grey, lightyellow, and red are all associated with ethanol treatment 
+greenyellow_ec_eigengene$ID <- factor(greenyellow_ec_eigengene$ID, levels = greenyellow_ec_eigengene$ID)
+#factoring ID so that ggplot with graph it in order 
+
+#greenyellow eigengene graph
+ggplot(data = greenyellow_ec_eigengene, aes(x = ID, y = value, fill = treatment, color = sex)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("ethanol" = "yellow", "control" = "aquamarine")) +
+  scale_color_manual(values = c("male" = "blue", "female" = "red")) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  labs(title = "greenyellow module")
+
+#blue module genes------------------------------------------------------------------ 
+blue_module <- module.gene.mapping %>% #astrocyte related 
+  filter(`bwnet$colors` == "blue") %>% #filter by color for a specific module
+  rownames()
+
+gene_symbols_blue <- mapIds(org.Rn.eg.db, keys=blue_module, column="SYMBOL", keytype="ENSEMBL")
+write_lines(gene_symbols_blue, "blue_symbols.txt")
+
+#blue eigengene data frame 
+blue_ec_eigengene <- ec_eigengenes %>%
+  select(MEblue) %>%
+  merge(ec_colData, by = 0) %>%
+  rename(ID = Row.names) %>%
+  rename(value = 2) %>%
+  mutate(ID = as.character(ID)) %>% #needed to change ID to character
+  arrange(treatment, sex) 
+
+blue_ec_eigengene$ID <- factor(blue_ec_eigengene$ID, levels = blue_ec_eigengene$ID)
+#factoring ID so that ggplot with graph it in order 
+
+#blue eigengene graph
+ggplot(data = blue_ec_eigengene, aes(x = ID, y = value, fill = treatment, color = sex)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("ethanol" = "yellow", "control" = "aquamarine")) +
+  scale_color_manual(values = c("male" = "blue", "female" = "red")) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  labs(title = "blue module")
+
+#magenta module genes----------------------------------------------------------------
+magenta_module <- module.gene.mapping %>% #astrocyte related 
+  filter(`bwnet$colors` == "magenta") %>% #filter by color for a specific module
+  rownames()
+
+gene_symbols_magenta <- mapIds(org.Rn.eg.db, keys=magenta_module, column="SYMBOL", keytype="ENSEMBL")
+write_lines(gene_symbols_magenta, "magenta_symbols.txt")
+
+#magenta eigengene data frame 
+magenta_ec_eigengene <- ec_eigengenes %>%
+  select(MEmagenta) %>%
+  merge(ec_colData, by = 0) %>%
+  rename(ID = Row.names) %>%
+  rename(value = 2) %>%
+  mutate(ID = as.character(ID)) %>% #needed to change ID to character
+  arrange(treatment, sex) 
+
+magenta_ec_eigengene$ID <- factor(magenta_ec_eigengene$ID, levels = magenta_ec_eigengene$ID)
+#factoring ID so that ggplot with graph it in order 
+
+#magenta eigengene graph
+ggplot(data = magenta_ec_eigengene, aes(x = ID, y = value, fill = treatment, color = sex)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("ethanol" = "yellow", "control" = "aquamarine")) +
+  scale_color_manual(values = c("male" = "blue", "female" = "red")) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  labs(title = "magenta module")
+
 ```
 
 
@@ -1580,7 +1687,7 @@ ggsave(
   "~/BP_GO.png",
   path = results_path,
   height = 9,
-  width = 8
+  width = 6
   )
 
 #KEGG----------
@@ -1604,14 +1711,14 @@ compare_enrichGo_graph <- dotplot(KEGG_result,
   theme(panel.grid.major.y = element_line(color = "gray", linetype = "solid"),
         panel.border = element_rect(color = "black",  # Border color
                                     size = 2),
-        legend.position = "right") 
+        legend.position = "bottom") 
 
 ggsave(
   "~/Kegg_Pathways.png",
   path = results_path,
   height = 9,
-  width = 8
+  width = 6
   )
 
 
- ```
+```
