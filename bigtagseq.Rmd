@@ -1045,7 +1045,42 @@ WGCNA Hippocampus
 #https://www.youtube.com/watch?v=gYE59uEMXT4&t=419s < mostly followed this one
 #https://wikis.utexas.edu/display/bioiteam/Clustering+using+WGCNA
 
+#sorting genes by variance-------------------------------- 
+varsort_hip_counts_data <- hip_counts_data %>%
+  mutate(row_names_column = row.names(.)) %>%
+  rowwise() %>%
+  mutate(variance = var(c_across(1:38))) %>%
+  ungroup() %>%
+  mutate(log_variance = log(variance))
+
+#plotting variance 
+ggplot(varsort_hip_counts_data, aes(x = variance)) +
+  geom_histogram(binwidth = 20) +
+  labs(title = "Histogram of Variance Data",
+       x = "Variance",
+       y = "Frequency") + 
+  scale_x_continuous(limits = c(0, 1000)) + 
+  scale_y_continuous(limits = c(0, 2000))
+
+#sorting data frame by genes with the most variance
+varsort_hip_counts_data <- varsort_hip_counts_data %>%
+  arrange(desc(variance)) 
+
+#taking the top 12500 genes 
+top_15000_hip_counts_data <- varsort_hip_counts_data[1:10000, ] 
+
+#changing the gene name column (row_names_column) back to row names  
+# Convert tibble to data frame
+top_15000_hip_counts_data <- as.data.frame(top_15000_hip_counts_data)
+# Set row names
+rownames(top_15000_hip_counts_data) <- top_15000_hip_counts_data$row_names_column
+
+#selecting only the columns with subjects 
+top_15000_hip_counts_data <- top_15000_hip_counts_data %>%
+  select(1:38)
+
 #detect outlier genes---------------------------------------------------------------
+#to avoid filtering by top xx number of genes with highest variance, change this to just hip_counts_data HERE
 gsg<- goodSamplesGenes(t(hip_counts_data))
 summary(gsg)
 gsg$allOK #result is false- so there are outliers. we need to find these genes and exclude from analysis 
@@ -1053,7 +1088,7 @@ gsg$allOK #result is false- so there are outliers. we need to find these genes a
 table(gsg$goodGenes)
 table(gsg$goodSamples)
 
-#remove genes that are detected as outliers
+#remove genes that are detected as outliers (change HERE)
 data_nooutlier <- hip_counts_data[gsg$goodGenes == TRUE,]
 
 #remove outlier samples - hierarchical clustering (method 1) (none found)
@@ -1061,6 +1096,7 @@ htree <- hclust(dist(t(data_nooutlier)), method = "average")
 plot(htree)
 
 #pca- method 2 for identifying outliers. Check for outliers (none found)
+#change HERE 
 pca <- prcomp(t(hip_counts_data))
 pca.dat <- pca$x
 
@@ -1069,9 +1105,12 @@ pca.var.percent <- round(pca.var/sum(pca.var) *100, digits = 2)
 
 pca.dat <- as.data.frame(pca.dat)
 
+#merge with hip_col_data
+pca.dat <- merge(pca.dat, hip_colData, by = "row.names", all = TRUE)
+
 ggplot(pca.dat, aes(PC1, PC2)) + 
-  geom_point() + 
-  geom_text(label = rownames(pca.dat)) + 
+  geom_point(aes(color = treatment, shape = sex)) + 
+   #geom_text(aes(label = Row.names)) + 
   labs(x = paste0('PC1: ',pca.var.percent[1], ' %'),
        y = paste0('PC2: ', pca.var.percent[2], ' %'))
 
@@ -1088,11 +1127,17 @@ hip_dds2 <- DESeqDataSetFromMatrix(countData = data_nooutlier,
                                    design = ~1) #do not specify a model 
 
 #remove all genes with counts less than 15 in more than 75% of samples (38 * 0.75 = ~29)
-hip_dds_75 <- hip_dds2[rowSums(counts(hip_dds2) >= 15) >= 29,]
+hip_dds_75 <- hip_dds2[rowSums(counts(hip_dds2) >= 10) >= 34,]
 nrow(hip_dds_75) #9540 genes left 
 
+#for skipping the above step uncomment this 
+hip_dds_75 <- hip_dds2 
+
 #perform variance stabilization
-hip_dds_norm <- vst(hip_dds_75)
+#hip_dds_norm <- vst(hip_dds_75) 
+
+#for skipping the above step uncomment this and comment out above
+hip_dds_norm <- hip_dds_75
 
 #get normalized counts
 hip_norm.counts <- assay(hip_dds_norm) %>%
@@ -1135,13 +1180,14 @@ hip_a2
 # convert matrix to numeric -----------------------------------------------------------
 hip_norm.counts[] <- sapply(hip_norm.counts, as.numeric)
 
-soft_power <- 4 #enter soft power here 
+soft_power <- 24 #enter soft power here 
 temp_cor <- cor
 cor <- WGCNA::cor
 
 #memory estimate w.r.t. blocksisze
 bwnet <- blockwiseModules(hip_norm.counts, 
-                 maxBlockSize = 14000, #size of block relates to how much ram you have, 5000 per 4 gb
+                 maxBlockSize = 22000, #size of block relates to how much ram you have, 5000 per 4 gb
+                #minModuleSize = 30, #added this one 3.3.24
                  TOMType = "signed", 
                  power = soft_power, 
                  mergeCutHeight = 0.25, #threshold to merge similar modules 
@@ -1193,8 +1239,8 @@ names(heatmap.data)
 #put the treatment and sex bins into x, and the range of rows for the modules into y
 
 CorLevelPlot(heatmap.data,
-             x= names(heatmap.data)[19:20],
-             y= names(heatmap.data)[2:18],
+             x= names(heatmap.data)[5:6],
+             y= names(heatmap.data)[2:4],
              col = c("blue1", "skyblue", "white", "pink", "red"))
 
 hip_eigengenes <- module_eigengenes #renaming this df to make it hippocampus specific
