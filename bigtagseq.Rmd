@@ -1295,18 +1295,70 @@ midnightblue_hip_eigengene <- hip_eigengenes %>%
   rename(ID = Row.names) %>%
   rename(value = 2) %>%
   mutate(ID = as.character(ID)) %>% #needed to change ID to character
-  arrange(treatment, sex) 
+  arrange(sex, treatment) %>%
+  mutate(sex = ifelse(sex == "female", "Female", ifelse(sex == "male", "Male", sex)))
 
-midnightblue_hip_eigengene$ID <- factor(midnightblue_hip_eigengene$ID, levels = midnightblue_hip_eigengene$ID)
 #factoring ID so that ggplot with graph it in order 
+midnightblue_hip_eigengene$ID <- factor(midnightblue_hip_eigengene$ID, levels = midnightblue_hip_eigengene$ID) 
 
 #midnightblue eigengene graph
-ggplot(data = midnightblue_hip_eigengene, aes(x = ID, y = value, fill = treatment, color = sex)) +
+ggplot(data = midnightblue_hip_eigengene, aes(x = ID, y = value, fill = treatment)) +
   geom_bar(stat = "identity") +
-  scale_fill_manual(values = c("ethanol" = "yellow", "control" = "aquamarine")) +
-  scale_color_manual(values = c("male" = "blue", "female" = "red")) + 
+  scale_fill_manual(values = c("ethanol" = "#E7B800", "control" = "#00AFBB")) + 
+  #scale_color_manual(values = c("male" = "blue", "female" = "red")) + 
+  theme_prism() + 
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
-  labs(title = "midnightblue module")
+  labs(title = "midnightblue module") 
+
+mean_se_midnightblue <- midnightblue_hip_eigengene %>%
+  group_by(sex, treatment) %>%
+  summarise(mean_value = mean(value),
+            sem = sd(value) / sqrt(n()))
+
+results_path <- "~/Documents/R Projects/tag-seq/bigtagseq/Graphs"
+
+#midnightblue eigengene graph grouped version 
+ggplot(mean_se_midnightblue, aes(sex, mean_value, color = treatment, fill = treatment)) + 
+  # geom_bar(size = 1, width = 0.9, position = position_dodge(width = 1), stat = "identity", alpha = 0.1) +
+  # geom_violin(data = midnightblue_hip_eigengene, aes(y = value), alpha = 0.1, lwd = 1, position = position_dodge(width = 1)) +
+  geom_errorbar(aes(ymin = mean_value - sem, ymax = mean_value + sem, color = treatment),
+                width = 0.2,  # Adjust this value for the width of the error bars
+                position = position_dodge(width = 1),
+                size = 1.0) +
+  stat_summary(fun = "mean",
+               aes(fill = treatment),
+               geom = "crossbar",
+               position = position_dodge(width = 1),
+               width = 0.5)+
+  geom_jitter(data = midnightblue_hip_eigengene, aes(y = value),
+              shape = 20, size = 3, position = position_jitterdodge(dodge.width = 1, jitter.width = 0.1), alpha = 0.6) +
+  ylab("Relative Eigengene Expression") +
+#  scale_y_continuous(labels = function(x) format(x, scientific = FALSE), expand = expansion(mult = c(0, 0)), limits = c(0,60000)) + 
+  scale_fill_manual(values = c("#00AFBB", "#E7B800")) +
+  scale_color_manual(values = c("#00AFBB", "#E7B800")) +
+  theme_prism(base_size = 18, base_family = "arial") +
+  theme(legend.position = "none") +
+  xlab("")
+
+ggsave(
+  "/mdblue_eigengene.png",
+  path = results_path,
+  height = 5,
+  width = 5
+  )
+
+#anova on eigengene 
+
+#anova for: main effect of treatment and interaction effect 
+mdblue_aov <- aov(value ~ treatment * sex, data = midnightblue_hip_eigengene)
+summary(mdblue_aov)
+
+tukey_result <- emmeans(mdblue_aov, specs = pairwise ~ treatment | sex)
+tukey_summary <- summary(tukey_result, adjust = "tukey")
+tukey_summary
+
+
+
 
 #red module genes------------------------------------------------------------------ 
 red_module <- module.gene.mapping %>%
@@ -1513,9 +1565,8 @@ cor <- temp_cor
 # Moduel Eigengenes
 module_eigengenes <- bwnet$MEs
 
-
-# Calculate kME values for all genes in all modules
-kME_values <- signedKME(bwnet$signedKME, moduleEigengenes)
+# # Calculate kME values for all genes in all modules
+# kME_values <- signedKME(bwnet$signedKME, moduleEigengenes)
 
 #Print out a preview
 head(module_eigengenes)
@@ -1864,3 +1915,34 @@ ggsave(
 
 
 ```
+
+Metascape top 5 enriched pathways midnight blue 
+```{r}
+goanalysis_mdblue <- read.csv("~/Documents/R Projects/tag-seq/bigtagseq/goanalysis_logs.csv") 
+
+#factoring
+goanalysis_mdblue$pathways <- factor(goanalysis_mdblue$pathways, levels = goanalysis_mdblue$pathways)
+
+# Reverse the order of levels
+goanalysis_mdblue$pathways <- forcats::fct_rev(goanalysis_mdblue$pathways)
+
+results_path <- "~/Documents/R Projects/tag-seq/bigtagseq/Graphs"
+
+ggplot(data = goanalysis_mdblue, aes(x = pathways, y = log)) + 
+  geom_bar(stat = "identity", fill = "lightgray", color = "black", size = 1) + 
+  theme_prism() + 
+  theme(axis.text.y = element_blank()) + 
+  scale_y_continuous(limits = c(0, 5), expand = c(0, 0)) + 
+  coord_flip() 
+
+ggsave(
+  "~/metascape_mdblue.png",
+  path = results_path,
+  height = 4,
+  width = 8.5
+  )
+```
+
+
+
+
