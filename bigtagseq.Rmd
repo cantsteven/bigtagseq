@@ -505,21 +505,28 @@ Volcano Plots
 #   subtitle = "Differential Expresion"
 # )
 
+
 #hippo male 
 EnhancedVolcano(male_hip_resOrdered_df,
   lab = male_hip_resOrdered_df$symbol,
   x = 'log2FoldChange',
-  y = 'padj', 
-  boxedLabels = TRUE,
+  y = 'pvalue', 
+  selectLab = c('Clu','Gfap','Aqp4','S100a3','Tmem176b','Sparc','Otof','Mdk' ),
+  boxedLabels = FALSE,
   drawConnectors = TRUE,
-  pCutoff = 0.1, 
+  pCutoff = 1e10,
   FCcutoff = 0.1,
+  cutoffLineCol = "gray",
   xlim = c(-2, 2),
-  ylim = c(0, 3),
+  ylim = c(0, 8),
   title = "Hippocampus- Male",
   legendPosition = 'none',
   subtitle = NULL,
-  max.overlaps = 25
+  max.overlaps = 30,
+  labSize = 5,
+  gridlines.major = FALSE,
+  gridlines.minor = FALSE,
+  col = c("grey30", "forestgreen", "orange", "red2")
 )
 
 ggsave(
@@ -533,17 +540,23 @@ ggsave(
 EnhancedVolcano(fem_hip_resOrdered_df,
   lab = fem_hip_resOrdered_df$symbol,
   x = 'log2FoldChange',
-  y = 'padj', 
+  y = 'pvalue', 
+  selectLab = c(''),
   boxedLabels = TRUE,
   drawConnectors = TRUE,
-  pCutoff = 0.1, 
+  pCutoff = 1e10,
   FCcutoff = 0.1,
+  cutoffLineCol = "gray",
   xlim = c(-2, 2),
-  ylim = c(0, 3),
+  ylim = c(0, 8),
   title = "Hippocampus- Female",
   legendPosition = 'none',
   subtitle = NULL,
-  max.overlaps = 25
+  max.overlaps = 25,
+  labSize = 5,
+  gridlines.major = FALSE,
+  gridlines.minor = FALSE,
+  col = c("grey30", "forestgreen", "orange", "red2")
 )
 
 ggsave(
@@ -557,17 +570,23 @@ ggsave(
 EnhancedVolcano(male_ec_resOrdered_df,
   lab = male_ec_resOrdered_df$symbol,
   x = 'log2FoldChange',
-  y = 'padj', 
-  boxedLabels = TRUE,
+  y = 'pvalue', 
+  selectLab = c('Gfap','Aqp4'),
+  boxedLabels = FALSE,
   drawConnectors = TRUE,
-  pCutoff = 0.1, 
+  pCutoff = 1e10,
   FCcutoff = 0.1,
+  cutoffLineCol = "gray",
   xlim = c(-2, 2),
-  ylim = c(0, 3),
+  ylim = c(0, 8),
   title = "Entorhinal Cortex- Male",
   legendPosition = 'none',
   subtitle = NULL,
-  max.overlaps = 25
+  max.overlaps = 25,
+  labSize = 5,
+  gridlines.major = FALSE,
+  gridlines.minor = FALSE,
+  col = c("grey30", "forestgreen", "orange", "red2")
 )
 
 ggsave(
@@ -581,17 +600,23 @@ ggsave(
 EnhancedVolcano(fem_ec_resOrdered_df,
   lab = fem_ec_resOrdered_df$symbol,
   x = 'log2FoldChange',
-  y = 'padj', 
-  boxedLabels = TRUE,
+  y = 'pvalue', 
+  selectLab = c('Sult1a1','Akap6','Alas2'),
+  boxedLabels = FALSE,
   drawConnectors = TRUE,
-  pCutoff = 0.1, 
+  pCutoff = 1e10,
   FCcutoff = 0.1,
+  cutoffLineCol = "gray",
   xlim = c(-2, 2),
-  ylim = c(0, 3),
+  ylim = c(0, 8),
   title = "Entorhinal Cortex- Female",
   legendPosition = 'none',
   subtitle = NULL,
-  max.overlaps = 25
+  max.overlaps = 25,
+  labSize = 5,
+  gridlines.major = FALSE,
+  gridlines.minor = FALSE,
+  col = c("grey30", "forestgreen", "orange", "red2")
 )
 
 ggsave(
@@ -1356,9 +1381,6 @@ summary(mdblue_aov)
 tukey_result <- emmeans(mdblue_aov, specs = pairwise ~ treatment | sex)
 tukey_summary <- summary(tukey_result, adjust = "tukey")
 tukey_summary
-
-
-
 
 #red module genes------------------------------------------------------------------ 
 red_module <- module.gene.mapping %>%
