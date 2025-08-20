@@ -514,7 +514,8 @@ EnhancedVolcano(male_hip_resOrdered_df,
   selectLab = c('Clu','Gfap','Aqp4','S100a3','Tmem176b','Sparc','Otof','Mdk' ),
   boxedLabels = FALSE,
   drawConnectors = TRUE,
-  pCutoff = 1e10,
+  pCutoff = 0.1,
+  pCutoffCol = "padj",
   FCcutoff = 0.1,
   cutoffLineCol = "gray",
   xlim = c(-2, 2),
@@ -526,7 +527,7 @@ EnhancedVolcano(male_hip_resOrdered_df,
   labSize = 5,
   gridlines.major = FALSE,
   gridlines.minor = FALSE,
-  col = c("grey30", "forestgreen", "orange", "red2")
+  col = c("grey30", "orange", "forestgreen", "red2")
 )
 
 ggsave(
@@ -544,7 +545,8 @@ EnhancedVolcano(fem_hip_resOrdered_df,
   selectLab = c(''),
   boxedLabels = TRUE,
   drawConnectors = TRUE,
-  pCutoff = 1e10,
+  pCutoff = 0.1,
+  pCutoffCol = "padj",
   FCcutoff = 0.1,
   cutoffLineCol = "gray",
   xlim = c(-2, 2),
@@ -556,7 +558,7 @@ EnhancedVolcano(fem_hip_resOrdered_df,
   labSize = 5,
   gridlines.major = FALSE,
   gridlines.minor = FALSE,
-  col = c("grey30", "forestgreen", "orange", "red2")
+  col = c("grey30", "orange", "forestgreen", "red2")
 )
 
 ggsave(
@@ -574,7 +576,8 @@ EnhancedVolcano(male_ec_resOrdered_df,
   selectLab = c('Gfap','Aqp4'),
   boxedLabels = FALSE,
   drawConnectors = TRUE,
-  pCutoff = 1e10,
+  pCutoff = 0.1,
+  pCutoffCol = "padj",
   FCcutoff = 0.1,
   cutoffLineCol = "gray",
   xlim = c(-2, 2),
@@ -586,7 +589,7 @@ EnhancedVolcano(male_ec_resOrdered_df,
   labSize = 5,
   gridlines.major = FALSE,
   gridlines.minor = FALSE,
-  col = c("grey30", "forestgreen", "orange", "red2")
+  col = c("grey30", "orange", "forestgreen", "red2")
 )
 
 ggsave(
@@ -604,7 +607,8 @@ EnhancedVolcano(fem_ec_resOrdered_df,
   selectLab = c('Sult1a1','Akap6','Alas2'),
   boxedLabels = FALSE,
   drawConnectors = TRUE,
-  pCutoff = 1e10,
+  pCutoff = 0.1,
+  pCutoffCol = "padj",
   FCcutoff = 0.1,
   cutoffLineCol = "gray",
   xlim = c(-2, 2),
@@ -616,7 +620,7 @@ EnhancedVolcano(fem_ec_resOrdered_df,
   labSize = 5,
   gridlines.major = FALSE,
   gridlines.minor = FALSE,
-  col = c("grey30", "forestgreen", "orange", "red2")
+  col = c("grey30", "orange", "forestgreen", "red2")
 )
 
 ggsave(
