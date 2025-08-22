@@ -12,7 +12,6 @@ library(tidyverse)
 library(DESeq2)
 library(apeglm) #to install: BiocManager::install("apeglm")
 #library(annotables) #to install: install.packages("devtools"); devtools::install_github("stephenturner/annotables")
-library(biobroom) #to install: BiocManager::install("biobroom")
 library(WGCNA) #to install: BiocManager::install("WGCNA") 
   #https://bioinformaticsworkbook.org/tutorials/wgcna.html#gsc.tab=0
   #https://alexslemonade.github.io/refinebio-examples/04-advanced-topics/network-analysis_rnaseq_01_wgcna.html
@@ -24,15 +23,9 @@ library(ggpubr)
 library(pheatmap) #heatmap
 library(stats) #for anovas
 library(emmeans) #for anovas
-library(CorLevelPlot) #devtools::install_github("kevinblighe/CorLevelPlot")
-library(GO.db) #to install: BiocManager::install("GO.db") ;this is for go analysis 
 library(AnnotationDbi) #to install: BiocManager::install("AnnotationDbi")
-library(matrixStats)
-library(ggthemes)
-library(clusterProfiler) #for clusterProfiler
-library(DOSE) #for clusterProfiler
-library(enrichplot) #for clusterProfiler
-library(ggprism)
+
+
 
 #formatting files 
 setwd("/Users/stevenguerin/Documents/R Projects/tag-seq")
