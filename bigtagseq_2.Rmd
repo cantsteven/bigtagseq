@@ -1,0 +1,1755 @@
+---
+title: "big_tagseq_graphs"
+author: "stevenguerin"
+date: "2023-09-10"
+output: html_document
+---
+
+Loading in packages and sorting the data
+
+```{r}
+library(tidyverse)
+library(DESeq2)
+library(apeglm) #to install: BiocManager::install("apeglm")
+#library(annotables) #to install: install.packages("devtools"); devtools::install_github("stephenturner/annotables")
+library(biobroom) #to install: BiocManager::install("biobroom")
+library(WGCNA) #to install: BiocManager::install("WGCNA") 
+  #https://bioinformaticsworkbook.org/tutorials/wgcna.html#gsc.tab=0
+  #https://alexslemonade.github.io/refinebio-examples/04-advanced-topics/network-analysis_rnaseq_01_wgcna.html
+library(EnhancedVolcano) #BiocManager::install('EnhancedVolcano')
+  #https://bioconductor.org/packages/devel/bioc/vignettes/EnhancedVolcano/inst/doc/EnhancedVolcano.html
+library(org.Rn.eg.db) #to install: BiocManager::install("org.Rn.eg.db")
+  #this is for annotation of the rat genes 
+library(ggpubr)
+library(pheatmap) #heatmap
+library(stats) #for anovas
+library(emmeans) #for anovas
+library(CorLevelPlot) #devtools::install_github("kevinblighe/CorLevelPlot")
+library(GO.db) #to install: BiocManager::install("GO.db") ;this is for go analysis 
+library(AnnotationDbi) #to install: BiocManager::install("AnnotationDbi")
+library(matrixStats)
+library(ggthemes)
+library(clusterProfiler) #for clusterProfiler
+library(DOSE) #for clusterProfiler
+library(enrichplot) #for clusterProfiler
+library(ggprism)
+
+#formatting files 
+setwd("/Users/stevenguerin/Documents/R Projects/tag-seq")
+
+#exp design data
+exp_design<- read.csv("~/Documents/R Projects/tag-seq/exp_design.csv")
+#deleting the first column
+colData<- exp_design[,2:ncol(exp_design)]
+#Set row names to the gene names
+rownames(colData) <- exp_design$id
+#reordering data by row names
+new_order1 <- sort(rownames(colData))
+colData <- colData[new_order1, ]
+#sorting colData data by region 
+hip_colData <- colData%>%
+  filter(region == "hippo")%>%
+  subset(select = -region)
+
+ec_colData <- colData%>%
+  filter(region == "entor")%>%
+  subset(select = -region)
+  
+#count data 
+rawcounts<- read.csv("~/Documents/R Projects/tag-seq/big_count_data.csv", check.names= FALSE)
+#deleting the first column
+counts_data<- rawcounts[,2:ncol(rawcounts)]
+#Set row names to the gene names
+rownames(counts_data) <- rawcounts$gene_id
+#Remove bottom 5 rows
+counts_data <- counts_data[1:(nrow(counts_data)-5),]
+#reordering data by column names
+new_order2 <- sort(colnames(counts_data))
+counts_data <- counts_data[, new_order2]
+#sorting counts_data by region 
+hip_counts_data<- counts_data[, grep("H", names(counts_data))]
+ec_counts_data<- counts_data[, grep("E", names(counts_data))]
+
+#Check to see if experimental design and count data frames match up, both should be TRUE 
+#hippo data
+all(colnames(hip_counts_data) %in% rownames(hip_colData))
+all(colnames(hip_counts_data) == rownames(hip_colData))
+#ec data
+all(colnames(ec_counts_data) %in% rownames(ec_colData))
+all(colnames(ec_counts_data) == rownames(ec_colData))
+```
+
+Hippocampus Males only DDS Object
+
+```{r}
+male_hip_counts_data <- hip_counts_data[,c("1_H","10_H", "11_H", "12_H", "13_H", "2_H", "29_H", "30_H", "31_H", "34_H", "37_H", "38_H", "39_H", "4_H", "40_H", "5_H", "8_H", "9_H")]
+
+male_hip_colData <- hip_colData%>%
+  filter(sex == "male")
+
+male_hip_dds<- DESeqDataSetFromMatrix(countData = male_hip_counts_data,
+                       colData = male_hip_colData, 
+                       design = ~ treatment)
+
+#prefiltering, only keeping genes with more than XX reads 
+male_hip_keep<- rowSums(counts(male_hip_dds)) >= 25
+male_hip_dds<- male_hip_dds[male_hip_keep,]
+male_hip_dds
+
+#Run DESeq on object.size; use resultNames(hip_dds) to understand the different results we can look for in the dds object 
+male_hip_dds<- DESeq(male_hip_dds)
+male_hip_res <- results(male_hip_dds, contrast = c("treatment", "ethanol", "control")) #("condition", "level_to_compare", "base_level")
+
+#genes ranked by pvalue
+male_hip_resOrdered <- male_hip_res[order(male_hip_res$pvalue),]
+
+#gene name annotation
+male_hip_resOrdered_df <- as.data.frame(male_hip_resOrdered)
+male_hip_resOrdered_df$symbol <- mapIds(org.Rn.eg.db, keys = rownames(male_hip_resOrdered_df), keytype = "ENSEMBL", column = "SYMBOL")
+male_hip_resOrdered_df #FINAL DATA FRAME 
+
+# #saving DEGs filtered by p value as a csv file for analysis outside of r 
+# hippo_DEGs_male <- male_hip_resOrdered_df %>%
+#   filter(pvalue < 0.05) %>%
+#   rownames_to_column(var = "ensemblid")
+# 
+# hippo_DEGs_male
+
+# write.csv(hippo_DEGs_male$ensemblid, "male_hippo_DEGs.csv", row.names = FALSE)
+```
+
+Hippocampus Females only DDS Object
+
+```{r}
+fem_hip_counts_data <-  hip_counts_data[,c("16_H","17_H", "18_H", "19_H", "21_H", "22_H", "23_H", "24_H", "25_H", "28_H", "41_H", "43_H", "44_H", "45_H", "46_H", "47_H", "48_H", "49_H", "50_H", "52_H")]
+
+fem_hip_colData <- hip_colData%>%
+  filter(sex == "female")
+
+fem_hip_dds<- DESeqDataSetFromMatrix(countData = fem_hip_counts_data,
+                       colData = fem_hip_colData, 
+                       design = ~ treatment)
+
+#prefiltering, only keeping genes with more than XX reads 
+fem_hip_keep<- rowSums(counts(fem_hip_dds)) >= 25
+fem_hip_dds<- fem_hip_dds[fem_hip_keep,]
+
+#Run DESeq on object.size; use resultNames(hip_dds) to understand the different results we can look for in the dds object 
+fem_hip_dds<- DESeq(fem_hip_dds)
+fem_hip_res <- results(fem_hip_dds, contrast = c("treatment", "ethanol", "control")) #("condition", "level_to_compare", "base_level")
+
+#genes ranked by pvalue
+fem_hip_resOrdered <- fem_hip_res[order(fem_hip_res$pvalue),]
+
+#gene name annotation
+fem_hip_resOrdered_df <- as.data.frame(fem_hip_resOrdered)
+fem_hip_resOrdered_df$symbol <- mapIds(org.Rn.eg.db, keys = rownames(fem_hip_resOrdered_df), keytype = "ENSEMBL", column = "SYMBOL")
+fem_hip_resOrdered_df #FINAL DATA FRAME 
+
+#saving DEGs filtered by p value as a csv file for analysis outside of r 
+# hippo_DEGs_female <- fem_hip_resOrdered_df %>%
+#   filter(pvalue < 0.05) %>%
+#   rownames_to_column(var = "ensemblid")
+# hippo_DEGs_female
+
+# write.csv(hippo_DEGs_female$ensemblid, "female_hippo_DEGs.csv", row.names = FALSE)
+```
+
+Entorhinal Cortex Males only DDS Object
+
+```{r}
+male_ec_counts_data <-  ec_counts_data[,c("1_E","10_E", "11_E", "12_E", "13_E", "2_E", "29_E", "30_E", "31_E", "34_E", "35_E", "37_E", "38_E", "39_E", "4_E", "40_E", "5_E", "8_E", "9_E")]
+
+male_ec_colData <- ec_colData%>%
+  filter(sex == "male")
+
+male_ec_dds<- DESeqDataSetFromMatrix(countData = male_ec_counts_data,
+                       colData = male_ec_colData, 
+                       design = ~ treatment)
+
+#prefiltering, only keeping genes with more than XX reads 
+male_ec_keep<- rowSums(counts(male_ec_dds)) >= 25
+male_ec_dds<- male_ec_dds[male_ec_keep,]
+
+#Run DESeq on object.size; use resultNames(ec_dds) to understand the different results we can look for in the dds object 
+male_ec_dds<- DESeq(male_ec_dds)
+male_ec_res <- results(male_ec_dds, contrast = c("treatment", "ethanol", "control")) #("condition", "level_to_compare", "base_level")
+
+#genes ranked by pvalue
+male_ec_resOrdered <- male_ec_res[order(male_ec_res$pvalue),]
+
+#gene name annotation
+male_ec_resOrdered_df <- as.data.frame(male_ec_resOrdered)
+male_ec_resOrdered_df$symbol <- mapIds(org.Rn.eg.db, keys = rownames(male_ec_resOrdered_df), keytype = "ENSEMBL", column = "SYMBOL")
+male_ec_resOrdered_df #FINAL DATA FRAME 
+
+#saving DEGs filtered by p value as a csv file for analysis outside of r 
+# ec_DEGs_male <- male_ec_resOrdered_df %>%
+#   filter(pvalue < 0.05) %>%
+#   rownames_to_column(var = "ensemblid")
+# 
+# ec_DEGs_male
+# 
+# write.csv(ec_DEGs_male$ensemblid, "male_ec_DEGs.csv", row.names = FALSE)
+```
+
+Entorhinal Cortex Females only DDS Object
+
+```{r}
+fem_ec_counts_data <-  ec_counts_data[,c("16_E","17_E", "18_E", "19_E", "21_E", "22_E", "23_E", "24_E", "25_E", "28_E", "41_E", "43_E", "44_E", "45_E", "46_E", "47_E", "48_E", "49_E", "50_E", "52_E")]
+
+fem_ec_colData <- ec_colData%>%
+  filter(sex == "female")
+
+fem_ec_dds<- DESeqDataSetFromMatrix(countData = fem_ec_counts_data,
+                       colData = fem_ec_colData, 
+                       design = ~ treatment)
+
+#prefiltering, only keeping genes with more than XX reads 
+fem_ec_keep<- rowSums(counts(fem_ec_dds)) >= 25
+fem_ec_dds<- fem_ec_dds[fem_ec_keep,]
+
+#Run DESeq on object.size; use resultNames(ec_dds) to understand the different results we can look for in the dds object 
+fem_ec_dds<- DESeq(fem_ec_dds)
+fem_ec_res <- results(fem_ec_dds, contrast = c("treatment", "ethanol", "control")) #("condition", "level_to_compare", "base_level")
+
+#genes ranked by pvalue
+fem_ec_resOrdered <- fem_ec_res[order(fem_ec_res$pvalue),]
+
+#gene name annotation
+fem_ec_resOrdered_df <- as.data.frame(fem_ec_resOrdered)
+fem_ec_resOrdered_df$symbol <- mapIds(org.Rn.eg.db, keys = rownames(fem_ec_resOrdered_df), keytype = "ENSEMBL", column = "SYMBOL")
+fem_ec_resOrdered_df #FINAL DATA FRAME 
+
+#saving DEGs filtered by p value as a csv file for analysis outside of r 
+# ec_DEGs_female <- fem_ec_resOrdered_df %>%
+#   filter(pvalue < 0.05) %>%
+#   rownames_to_column(var = "ensemblid")
+# 
+# ec_DEGs_female
+# 
+# write.csv(ec_DEGs_female$ensemblid, "female_ec_DEGs.csv", row.names = FALSE)
+```
+
+Plotting some genes:
+
+```{r}
+gfaphip <- plotCounts(hip_dds, gene="ENSRNOG00000002919", intgroup="treatment")
+
+#plotCounts(ec_dds, gene="ENSRNOG00000002919", intgroup="treatment")
+
+ggplot(gfaphip, aes(x=sex, y = count))+ 
+  geom_jitter()+ 
+  geom_boxplot(alpha = 0.5)+ 
+  labs(title = "GFAP")+ 
+  ylab("normalized count")
+```
+
+MA Plots
+
+```{r}
+#without shrinkage: 
+plotMA(hip_res)
+
+plotMA(ec_res)
+
+#with shrinkage: 
+#hippocampus
+resultsNames(hip_dds)
+
+hip_resLFC <- lfcShrink(hip_dds, coef="treatment_ethanol_vs_control", type="apeglm")
+hip_resLFC
+
+plotMA(hip_resLFC, ylim=c(-2,2))
+
+#entorhinal cortex
+resultsNames(ec_dds)
+
+ec_resLFC <- lfcShrink(ec_dds, coef="treatment_ethanol_vs_control", type="apeglm")
+ec_resLFC
+
+plotMA(ec_resLFC, ylim=c(-2,2))
+```
+
+PCA Plots
+
+```{r}
+#hippocampus
+hip_vsd <- vst(hip_dds)
+
+plotPCA(hip_vsd, intgroup=c("treatment", "sex"))
+
+#hippocampus
+ec_vsd <- vst(ec_dds)
+
+plotPCA(ec_vsd, intgroup=c("treatment", "sex"))
+```
+
+Volcano Plots
+
+```{r}
+#hippo male 
+EnhancedVolcano(male_hip_resOrdered_df,
+  lab = male_hip_resOrdered_df$symbol,
+  x = 'log2FoldChange',
+  y = 'pvalue', 
+  selectLab = c('Clu','Gfap','Aqp4','S100a3','Tmem176b','Sparc','Otof','Mdk' ),
+  boxedLabels = FALSE,
+  drawConnectors = TRUE,
+  pCutoff = 0.1,
+  pCutoffCol = "padj",
+  FCcutoff = 0.1,
+  cutoffLineCol = "gray",
+  xlim = c(-2, 2),
+  ylim = c(0, 8),
+  title = "Hippocampus- Male",
+  legendPosition = 'none',
+  subtitle = NULL,
+  max.overlaps = 30,
+  labSize = 5,
+  gridlines.major = FALSE,
+  gridlines.minor = FALSE,
+  col = c("grey30", "orange", "forestgreen", "red2")
+)
+
+ggsave(
+  "/hip_male_volcano.png",
+  path = "~/Documents/R Projects/tag-seq/bigtagseq/Graphs",
+  height = 5,
+  width = 4
+  )
+
+#hippo female 
+EnhancedVolcano(fem_hip_resOrdered_df,
+  lab = fem_hip_resOrdered_df$symbol,
+  x = 'log2FoldChange',
+  y = 'pvalue', 
+  selectLab = c(''),
+  boxedLabels = TRUE,
+  drawConnectors = TRUE,
+  pCutoff = 0.1,
+  pCutoffCol = "padj",
+  FCcutoff = 0.1,
+  cutoffLineCol = "gray",
+  xlim = c(-2, 2),
+  ylim = c(0, 8),
+  title = "Hippocampus- Female",
+  legendPosition = 'none',
+  subtitle = NULL,
+  max.overlaps = 25,
+  labSize = 5,
+  gridlines.major = FALSE,
+  gridlines.minor = FALSE,
+  col = c("grey30", "orange", "forestgreen", "red2")
+)
+
+ggsave(
+  "/hip_fem_volcano.png",
+  path = "~/Documents/R Projects/tag-seq/bigtagseq/Graphs",
+  height = 5,
+  width = 4
+  )
+
+#ec male 
+EnhancedVolcano(male_ec_resOrdered_df,
+  lab = male_ec_resOrdered_df$symbol,
+  x = 'log2FoldChange',
+  y = 'pvalue', 
+  selectLab = c('Gfap','Aqp4'),
+  boxedLabels = FALSE,
+  drawConnectors = TRUE,
+  pCutoff = 0.1,
+  pCutoffCol = "padj",
+  FCcutoff = 0.1,
+  cutoffLineCol = "gray",
+  xlim = c(-2, 2),
+  ylim = c(0, 8),
+  title = "Entorhinal Cortex- Male",
+  legendPosition = 'none',
+  subtitle = NULL,
+  max.overlaps = 25,
+  labSize = 5,
+  gridlines.major = FALSE,
+  gridlines.minor = FALSE,
+  col = c("grey30", "orange", "forestgreen", "red2")
+)
+
+ggsave(
+  "/ec_male_volcano.png",
+  path = "~/Documents/R Projects/tag-seq/bigtagseq/Graphs",
+  height = 5,
+  width = 4
+  )
+
+#ec female
+EnhancedVolcano(fem_ec_resOrdered_df,
+  lab = fem_ec_resOrdered_df$symbol,
+  x = 'log2FoldChange',
+  y = 'pvalue', 
+  selectLab = c('Sult1a1','Akap6','Alas2'),
+  boxedLabels = FALSE,
+  drawConnectors = TRUE,
+  pCutoff = 0.1,
+  pCutoffCol = "padj",
+  FCcutoff = 0.1,
+  cutoffLineCol = "gray",
+  xlim = c(-2, 2),
+  ylim = c(0, 8),
+  title = "Entorhinal Cortex- Female",
+  legendPosition = 'none',
+  subtitle = NULL,
+  max.overlaps = 25,
+  labSize = 5,
+  gridlines.major = FALSE,
+  gridlines.minor = FALSE,
+  col = c("grey30", "orange", "forestgreen", "red2")
+)
+
+ggsave(
+  "/ec_fem_volcano.png",
+  path = "~/Documents/R Projects/tag-seq/bigtagseq/Graphs",
+  height = 5,
+  width = 4
+  )
+```
+
+Gene count graphs by region
+
+```{r}
+#extracting the counts for genes of interest 
+hip_genelist<- counts(hip_dds, normalized = FALSE)%>%
+  as.data.frame()%>%
+  tibble::rownames_to_column(var = "ENSEMBL")%>% #converting row name to a column 
+  mutate(symbol = mapIds(org.Rn.eg.db, keys = ENSEMBL, keytype = "ENSEMBL", column = "SYMBOL"))%>%
+  subset(select = -ENSEMBL)%>%
+  filter(symbol %in% c("Clu","Gfap", "Apln", "Lxn", "Grin2c", "Aqp4", "Pltp", "Htra1", "Esr1", "Esr2"))
+
+hip_genelist
+
+#modyfing hip_colData so that the the rownames is a column 
+hip_colData2 <- hip_colData%>%
+  tibble::rownames_to_column(var = "id")
+
+hip_colData2
+
+#Gfap
+#data frame
+gfapgene<- hip_genelist%>%
+  filter(symbol == "Gfap")%>%
+  subset(select = -symbol)%>% #get rid of the symbol column
+  t()%>% #transpose
+  as.data.frame() %>%
+  tibble::rownames_to_column(var = "id")%>%
+  {colnames(.)[2] <- "count"; .}%>%
+  full_join(hip_colData2, by = "id")
+
+#anovas
+gfapmodel <- lm(count ~ sex * treatment, data = gfapgene)
+gfapanova <- anova(gfapmodel)
+gfapanova
+
+emmeans(gfapmodel, pairwise ~ sex + treatment)
+
+#graph 
+gfapcountsgraph <- ggboxplot(gfapgene, "sex", "count",
+               color = "treatment", 
+               add = "jitter",
+               main = "Gfap Normalized Counts",
+               palette = "jco") + 
+    stat_compare_means(aes(group = sex), label = "p.signif",
+                       label.y = 1500)
+
+gfapcountsgraph
+
+#Aqp4
+#data frame
+aqp4gene<- hip_genelist%>%
+  filter(symbol == "Aqp4")%>%
+  subset(select = -symbol)%>% #get rid of the symbol column
+  t()%>% #transpose
+  as.data.frame() %>%
+  tibble::rownames_to_column(var = "id")%>%
+  {colnames(.)[2] <- "count"; .}%>%
+  full_join(hip_colData2, by = "id")
+
+#anovas
+aqp4model <- lm(count ~ sex * treatment, data = aqp4gene)
+aqp4anova <- anova(aqp4model)
+aqp4anova
+
+emmeans(gfapmodel, pairwise ~ sex + treatment)
+
+#graph 
+aqp4countsgraph <- ggboxplot(aqp4gene, "sex", "count",
+               color = "treatment", 
+               add = "jitter",
+               main = "Aqp4 Normalized Counts",
+               palette = "jco") + 
+    stat_compare_means(aes(group = sex), label = "p.signif",
+                       label.y = 750)
+
+aqp4countsgraph
+
+
+ggarrange(gfapcountsgraph, aqp4countsgraph, ncol = 2, common.legend = TRUE)
+```
+
+Astrocyte related gene counts
+
+```{r}
+#extracting the counts for genes of interest 
+hip_genelist<- counts(hip_dds, normalized = FALSE)%>%
+  as.data.frame()%>%
+  tibble::rownames_to_column(var = "ENSEMBL")%>% #converting row name to a column 
+  mutate(symbol = mapIds(org.Rn.eg.db, keys = ENSEMBL, keytype = "ENSEMBL", column = "SYMBOL"))%>%
+  subset(select = -ENSEMBL)%>%
+  filter(symbol %in% c("Clu","Gfap", "Aqp4", "S100a3"))
+
+hip_genelist
+
+#modyfing hip_colData so that the the rownames is a column 
+hip_colData2 <- hip_colData%>%
+  tibble::rownames_to_column(var = "id")
+
+hip_colData2
+
+#extracting the counts for genes of interest EC
+ec_genelist<- counts(ec_dds, normalized = FALSE)%>%
+  as.data.frame()%>%
+  tibble::rownames_to_column(var = "ENSEMBL")%>% #converting row name to a column 
+  mutate(symbol = mapIds(org.Rn.eg.db, keys = ENSEMBL, keytype = "ENSEMBL", column = "SYMBOL"))%>%
+  subset(select = -ENSEMBL)%>%
+  filter(symbol %in% c("Clu","Gfap", "Aqp4", "S100a3"))
+
+ec_genelist
+
+#modyfing hip_colData so that the the rownames is a column 
+ec_colData2 <- ec_colData%>%
+  tibble::rownames_to_column(var = "id")
+
+ec_colData2
+
+#---------------------------------------------------------
+#Gfap Hip
+#data frame
+gfapgene<- hip_genelist%>%
+  filter(symbol == "Gfap")%>%
+  subset(select = -symbol)%>% #get rid of the symbol column
+  t()%>% #transpose
+  as.data.frame() %>%
+  tibble::rownames_to_column(var = "id")%>%
+  {colnames(.)[2] <- "count"; .}%>%
+  full_join(hip_colData2, by = "id")
+
+#anovas
+gfapmodel <- lm(count ~ sex * treatment, data = gfapgene)
+gfapanova <- anova(gfapmodel)
+gfapanova
+
+emmeans(gfapmodel, pairwise ~ sex + treatment)
+
+#graph 
+gfapcountsgraph <- ggplot(gfapgene, aes(x = sex, y = count, color = treatment)) + 
+  geom_boxplot() + 
+  geom_jitter(position = position_jitterdodge()) + 
+  scale_fill_manual(values = c("#00AFBB", "#E7B800"))+
+  scale_color_manual(values = c("#00AFBB", "#E7B800"))+
+  theme_minimal() 
+
+gfapcountsgraph
+
+#Gfap EC
+#data frame
+gfapgeneec<- ec_genelist%>%
+  filter(symbol == "Gfap")%>%
+  subset(select = -symbol)%>% #get rid of the symbol column
+  t()%>% #transpose
+  as.data.frame() %>%
+  tibble::rownames_to_column(var = "id")%>%
+  {colnames(.)[2] <- "count"; .}%>%
+  full_join(ec_colData2, by = "id")
+
+#anovas
+gfapmodelec <- lm(count ~ sex * treatment, data = gfapgeneec)
+gfapanovaec <- anova(gfapmodelec)
+gfapanovaec
+
+emmeans(gfapmodelec, pairwise ~ sex + treatment)
+
+#graph 
+gfapcountsgraphec <- ggplot(gfapgeneec, aes(x = sex, y = count, color = treatment)) + 
+  geom_boxplot() + 
+  geom_jitter(position = position_jitterdodge()) + 
+  scale_fill_manual(values = c("#00AFBB", "#E7B800"))+
+  scale_color_manual(values = c("#00AFBB", "#E7B800"))+
+  theme_minimal()  
+
+gfapcountsgraphec
+
+gfapplot<- ggarrange(gfapcountsgraph, gfapcountsgraphec, ncol = 2, common.legend = TRUE)
+annotate_figure(gfapplot, top = text_grob("GFAP Normalized Counts", 
+               color = "black", face = "bold", size = 14))
+
+#---------------------------------------------------------
+#Aqp4 Hip
+#data frame
+aqp4gene<- hip_genelist%>%
+  filter(symbol == "Aqp4")%>%
+  subset(select = -symbol)%>% #get rid of the symbol column
+  t()%>% #transpose
+  as.data.frame() %>%
+  tibble::rownames_to_column(var = "id")%>%
+  {colnames(.)[2] <- "count"; .}%>%
+  full_join(hip_colData2, by = "id")
+
+#anovas
+aqp4model <- lm(count ~ sex * treatment, data = aqp4gene)
+aqp4anova <- anova(aqp4model)
+aqp4anova
+
+emmeans(aqp4model, pairwise ~ sex + treatment)
+
+#graph 
+aqp4countsgraph <- ggplot(aqp4gene, aes(x = sex, y = count, color = treatment)) + 
+  geom_boxplot() + 
+  geom_jitter(position = position_jitterdodge()) + 
+  scale_fill_manual(values = c("#00AFBB", "#E7B800"))+
+  scale_color_manual(values = c("#00AFBB", "#E7B800"))+
+  theme_minimal() 
+
+aqp4countsgraph
+
+#Aqp4 EC
+#data frame
+aqp4geneec<- ec_genelist%>%
+  filter(symbol == "Aqp4")%>%
+  subset(select = -symbol)%>% #get rid of the symbol column
+  t()%>% #transpose
+  as.data.frame() %>%
+  tibble::rownames_to_column(var = "id")%>%
+  {colnames(.)[2] <- "count"; .}%>%
+  full_join(ec_colData2, by = "id")
+
+#anovas
+aqp4modelec <- lm(count ~ sex * treatment, data = aqp4geneec)
+aqp4anovaec <- anova(aqp4modelec)
+aqp4anovaec
+
+emmeans(aqp4modelec, pairwise ~ sex + treatment)
+
+#graph 
+aqp4countsgraphec <- ggplot(aqp4geneec, aes(x = sex, y = count, color = treatment)) + 
+  geom_boxplot() + 
+  geom_jitter(position = position_jitterdodge()) + 
+  scale_fill_manual(values = c("#00AFBB", "#E7B800"))+
+  scale_color_manual(values = c("#00AFBB", "#E7B800"))+
+  theme_minimal()  
+
+aqp4countsgraphec
+
+aqp4plot<- ggarrange(aqp4countsgraph, aqp4countsgraphec, ncol = 2, common.legend = TRUE)
+annotate_figure(aqp4plot, top = text_grob("Aqp4 Normalized Counts", 
+               color = "black", face = "bold", size = 14))
+
+#---------------------------------------------------------
+#s100a3 Hip
+#data frame
+s100a3gene<- hip_genelist%>%
+  filter(symbol == "S100a3")%>%
+  subset(select = -symbol)%>% #get rid of the symbol column
+  t()%>% #transpose
+  as.data.frame() %>%
+  tibble::rownames_to_column(var = "id")%>%
+  {colnames(.)[2] <- "count"; .}%>%
+  full_join(hip_colData2, by = "id")
+
+#anovas
+s100a3model <- lm(count ~ sex * treatment, data = s100a3gene)
+s100a3anova <- anova(s100a3model)
+s100a3anova
+
+emmeans(s100a3model, pairwise ~ sex + treatment)
+
+#graph 
+s100a3countsgraph <- ggplot(s100a3gene, aes(x = sex, y = count, color = treatment)) + 
+  geom_boxplot() + 
+  geom_jitter(position = position_jitterdodge()) + 
+  scale_fill_manual(values = c("#00AFBB", "#E7B800"))+
+  scale_color_manual(values = c("#00AFBB", "#E7B800"))+
+  theme_minimal() 
+
+s100a3countsgraph
+
+#s100a3 EC
+#data frame
+s100a3geneec<- ec_genelist%>%
+  filter(symbol == "S100a3")%>%
+  subset(select = -symbol)%>% #get rid of the symbol column
+  t()%>% #transpose
+  as.data.frame() %>%
+  tibble::rownames_to_column(var = "id")%>%
+  {colnames(.)[2] <- "count"; .}%>%
+  full_join(ec_colData2, by = "id")
+
+#anovas
+s100a3modelec <- lm(count ~ sex * treatment, data = s100a3geneec)
+s100a3anovaec <- anova(s100a3modelec)
+s100a3anovaec
+
+emmeans(s100a3modelec, pairwise ~ sex + treatment)
+
+#graph 
+s100a3countsgraphec <- ggplot(s100a3geneec, aes(x = sex, y = count, color = treatment)) + 
+  geom_boxplot() + 
+  geom_jitter(position = position_jitterdodge()) + 
+  scale_fill_manual(values = c("#00AFBB", "#E7B800"))+
+  scale_color_manual(values = c("#00AFBB", "#E7B800"))+
+  theme_minimal()  
+
+s100a3countsgraphec
+
+s100a3plot<- ggarrange(s100a3countsgraph, s100a3countsgraphec, ncol = 2, common.legend = TRUE)
+annotate_figure(s100a3plot, top = text_grob("S100a3 Normalized Counts", 
+               color = "black", face = "bold", size = 14))
+
+#---------------------------------------------------------
+#clu Hip
+#data frame
+clugene<- hip_genelist%>%
+  filter(symbol == "Clu")%>%
+  subset(select = -symbol)%>% #get rid of the symbol column
+  t()%>% #transpose
+  as.data.frame() %>%
+  tibble::rownames_to_column(var = "id")%>%
+  {colnames(.)[2] <- "count"; .}%>%
+  full_join(hip_colData2, by = "id")
+
+#anovas
+clumodel <- lm(count ~ sex * treatment, data = clugene)
+cluanova <- anova(clumodel)
+cluanova
+
+emmeans(clumodel, pairwise ~ sex + treatment)
+
+#graph 
+clucountsgraph <- ggplot(clugene, aes(x = sex, y = count, color = treatment)) + 
+  geom_boxplot() + 
+  geom_jitter(position = position_jitterdodge()) + 
+  scale_fill_manual(values = c("#00AFBB", "#E7B800"))+
+  scale_color_manual(values = c("#00AFBB", "#E7B800"))+
+  theme_minimal() 
+
+clucountsgraph
+
+#clu EC
+#data frame
+clugeneec<- ec_genelist%>%
+  filter(symbol == "Clu")%>%
+  subset(select = -symbol)%>% #get rid of the symbol column
+  t()%>% #transpose
+  as.data.frame() %>%
+  tibble::rownames_to_column(var = "id")%>%
+  {colnames(.)[2] <- "count"; .}%>%
+  full_join(ec_colData2, by = "id")
+
+#anovas
+clumodelec <- lm(count ~ sex * treatment, data = clugeneec)
+cluanovaec <- anova(clumodelec)
+cluanovaec
+
+emmeans(clumodelec, pairwise ~ sex + treatment)
+
+#graph 
+clucountsgraphec <- ggplot(clugeneec, aes(x = sex, y = count, color = treatment)) + 
+  geom_boxplot() + 
+  geom_jitter(position = position_jitterdodge()) + 
+  scale_fill_manual(values = c("#00AFBB", "#E7B800"))+
+  scale_color_manual(values = c("#00AFBB", "#E7B800"))+
+  theme_minimal()  
+
+clucountsgraphec
+
+cluplot<- ggarrange(clucountsgraph, clucountsgraphec, ncol = 2, common.legend = TRUE)
+annotate_figure(cluplot, top = text_grob("Clu Normalized Counts", 
+               color = "black", face = "bold", size = 14))
+```
+
+Heatmaps
+
+```{r}
+#Hippocampus
+#list of genes we want to use
+hip_genelist<- counts(hip_dds, normalized = TRUE)%>%
+  as.data.frame()%>%
+  tibble::rownames_to_column(var = "ENSEMBL")%>% #converting row name to a column 
+  mutate(symbol = mapIds(org.Rn.eg.db, keys = ENSEMBL, keytype = "ENSEMBL", column = "SYMBOL"))%>%
+  subset(select = -ENSEMBL)%>%
+  filter(symbol %in% c("Gfap", "Aqp4", "Clu", "Otof", "S100a3", "Sparc", "Mdk", "Tmem176b"))
+
+#taking the df you made in the previous chunk and editing it a bit 
+row.names(hip_genelist) <- hip_genelist$symbol
+hip_genelist<- hip_genelist%>%
+  subset(select = -symbol)
+
+#arranging hip_colData
+hip_colData_arranged <- hip_colData%>%
+  arrange(treatment,sex)
+
+hip_colData_order <- rownames(hip_colData_arranged)
+hip_genelist_reordered <- hip_genelist[, hip_colData_order]
+
+#heatmap
+hip_heatmap<- pheatmap(
+  hip_genelist_reordered,
+  cluster_rows = TRUE,
+  cluster_cols = FALSE, 
+  #annotation= hip_colData,
+  show_rownames = TRUE,
+  gaps_col = c(10, 18, 28),
+  cutree_rows = 2,
+  cellheight = 25,
+  border_color = FALSE,
+  scale = "row",
+  show_colnames = FALSE
+)
+
+#Entorhinal Cortex
+#list of genes we want to use
+ec_genelist<- counts(ec_dds, normalized = TRUE)%>%
+  as.data.frame()%>%
+  tibble::rownames_to_column(var = "ENSEMBL")%>% #converting row name to a column 
+  mutate(symbol = mapIds(org.Rn.eg.db, keys = ENSEMBL, keytype = "ENSEMBL", column = "SYMBOL"))%>%
+  subset(select = -ENSEMBL)%>%
+  filter(symbol %in% c("Gfap","Aqp4", "Sult1a1", "Akap6", "Alas2"))
+
+#taking the df you made in the previous chunk and editing it a bit 
+row.names(ec_genelist) <- ec_genelist$symbol
+ec_genelist<- ec_genelist%>%
+  subset(select = -symbol)
+
+#arranging hip_colData
+ec_colData_arranged <- ec_colData%>%
+  arrange(treatment,sex)
+
+ec_colData_order <- rownames(ec_colData_arranged)
+ec_genelist_reordered <- ec_genelist[, ec_colData_order]
+
+#heatmap
+ec_heatmap<- pheatmap(
+  ec_genelist_reordered,
+  cluster_rows = TRUE,
+  cluster_cols = FALSE, 
+  show_rownames = TRUE,
+  gaps_col = c(10, 19, 29),
+  cutree_rows = 2,
+  border_color = FALSE,
+  cellheight = 25,
+  scale = "row",
+  show_colnames = FALSE
+)
+
+
+```
+
+WGCNA Hippocampus
+
+```{r}
+##Tutorials:
+#https://rstudio-pubs-static.s3.amazonaws.com/687551_ed469310d8ea4652991a2e850b0018de.html
+#https://www.youtube.com/watch?v=gYE59uEMXT4&t=419s < mostly followed this one
+#https://wikis.utexas.edu/display/bioiteam/Clustering+using+WGCNA
+
+#sorting genes by variance-------------------------------- 
+# varsort_hip_counts_data <- hip_counts_data %>%
+#   mutate(row_names_column = row.names(.)) %>%
+#   rowwise() %>%
+#   mutate(variance = var(c_across(1:38))) %>%
+#   ungroup() %>%
+#   mutate(log_variance = log(variance))
+# 
+# #plotting variance 
+# ggplot(varsort_hip_counts_data, aes(x = variance)) +
+#   geom_histogram(binwidth = 20) +
+#   labs(title = "Histogram of Variance Data",
+#        x = "Variance",
+#        y = "Frequency") + 
+#   scale_x_continuous(limits = c(0, 1000)) + 
+#   scale_y_continuous(limits = c(0, 2000))
+# 
+# #sorting data frame by genes with the most variance
+# varsort_hip_counts_data <- varsort_hip_counts_data %>%
+#   arrange(desc(variance)) 
+# 
+# #taking the top 12500 genes 
+# top_15000_hip_counts_data <- varsort_hip_counts_data[1:10000, ] 
+# 
+# #changing the gene name column (row_names_column) back to row names  
+# # Convert tibble to data frame
+# top_15000_hip_counts_data <- as.data.frame(top_15000_hip_counts_data)
+# # Set row names
+# rownames(top_15000_hip_counts_data) <- top_15000_hip_counts_data$row_names_column
+# 
+# #selecting only the columns with subjects 
+# top_15000_hip_counts_data <- top_15000_hip_counts_data %>%
+#   select(1:38)
+
+#detect outlier genes---------------------------------------------------------------
+#to avoid filtering by top xx number of genes with highest variance, change this to just hip_counts_data HERE
+gsg<- goodSamplesGenes(t(hip_counts_data))
+summary(gsg)
+gsg$allOK #result is false- so there are outliers. we need to find these genes and exclude from analysis 
+
+table(gsg$goodGenes)
+table(gsg$goodSamples)
+
+#remove genes that are detected as outliers (change HERE)
+data_nooutlier <- hip_counts_data[gsg$goodGenes == TRUE,]
+
+#remove outlier samples - hierarchical clustering (method 1) (none found)
+htree <- hclust(dist(t(data_nooutlier)), method = "average")
+plot(htree)
+
+#pca- method 2 for identifying outliers. Check for outliers (none found)
+#change HERE 
+pca <- prcomp(t(hip_counts_data))
+pca.dat <- pca$x
+
+pca.var <- pca$sdev^2
+pca.var.percent <- round(pca.var/sum(pca.var) *100, digits = 2)
+
+pca.dat <- as.data.frame(pca.dat)
+
+#merge with hip_col_data
+pca.dat <- merge(pca.dat, hip_colData, by = "row.names", all = TRUE)
+
+ggplot(pca.dat, aes(PC1, PC2)) + 
+  geom_point(aes(color = treatment, shape = sex)) + 
+   #geom_text(aes(label = Row.names)) + 
+  labs(x = paste0('PC1: ',pca.var.percent[1], ' %'),
+       y = paste0('PC2: ', pca.var.percent[2], ' %'))
+
+
+# Normalization with DESeq------------------------------------------------------
+#expression data needs to be normalized 
+#ensuring ronames and column names are identical
+all(rownames(hip_colData) %in% colnames(data_nooutlier))
+all(rownames(hip_colData) == colnames(data_nooutlier))
+
+#create dds 
+hip_dds2 <- DESeqDataSetFromMatrix(countData = data_nooutlier, 
+                                   colData = hip_colData, 
+                                   design = ~1) #do not specify a model 
+
+#remove all genes with counts less than 15 in more than 75% of samples (38 * 0.75 = ~29)
+hip_dds_75 <- hip_dds2[rowSums(counts(hip_dds2) >= 15) >= 29,]
+nrow(hip_dds_75) #9540 genes left 
+
+#for skipping the above step uncomment this 
+#hip_dds_75 <- hip_dds2 
+
+#perform variance stabilization
+hip_dds_norm <- vst(hip_dds_75) 
+
+#for skipping the above step uncomment this and comment out above
+#hip_dds_norm <- hip_dds_75
+
+#get normalized counts
+hip_norm.counts <- assay(hip_dds_norm) %>%
+  t()
+
+# Understanding soft power----------------------------------------------------------------
+power <- c(c(1:10), seq(from = 12, to = 50, by = 2))
+
+#call the network topology analysis function 
+hip_sft <- pickSoftThreshold(hip_norm.counts, 
+                  powerVector = power, 
+                  networkType = "signed",
+                  verbose = 5)
+
+hip_sft.data <- hip_sft$fitIndices
+
+#visualization to pick power
+hip_a1 <- ggplot(hip_sft.data, aes(Power, SFT.R.sq, label = Power)) + 
+  geom_point() + 
+  geom_text(nudge_y = 0.1) + 
+  geom_hline(yintercept = 0.8, color = 'red') + 
+  labs(x= 'Power', y = 'Scale free topology model fit, signed R^2') + 
+  theme_classic()
+
+hip_a1
+
+#you want to choose a power that has a value just higher than 0.8 R^2
+#in our instance soft power would be 4- this may be too low though based on my reading
+
+#visualization for mean connectivity 
+hip_a2 <- ggplot(hip_sft.data, aes(Power, mean.k., label= Power)) + 
+  geom_point() + 
+  geom_text(nudge_y = 0.1) + 
+  labs(x= 'Power', y = 'Mean Connectivity') + 
+  theme_classic()
+
+hip_a2
+
+
+# convert matrix to numeric -----------------------------------------------------------
+hip_norm.counts[] <- sapply(hip_norm.counts, as.numeric)
+
+soft_power <- 4 #enter soft power here 
+temp_cor <- cor
+cor <- WGCNA::cor
+
+#memory estimate w.r.t. blocksisze
+bwnet <- blockwiseModules(hip_norm.counts, 
+                 maxBlockSize = 22000, #size of block relates to how much ram you have, 5000 per 4 gb
+                #minModuleSize = 30, #added this one 3.3.24
+                 TOMType = "signed", 
+                 power = soft_power, 
+                 mergeCutHeight = 0.25, #threshold to merge similar modules 
+                 numericLabels = FALSE, #going by colors instead of numbers
+                 randomSeed = 1234,
+                 verbose = 3)
+
+cor <- temp_cor
+
+# Calculate TOM (topology overlap matrix) similarity matrix
+adjacency= adjacency(hip_norm.counts, type = "signed", power = soft_power)
+
+TOM = TOMsimilarity(adjacency)
+
+# Check the dimensions of the TOM matrix
+dim(TOM)
+
+# Moduel Eigengenes
+module_eigengenes <- bwnet$MEs
+
+#Print out a preview
+head(module_eigengenes)
+
+#get number of genes for each module
+table(bwnet$colors)
+
+#plot a dendogram and the module colors before and after merging underneath
+plotDendroAndColors(bwnet$dendrograms[[1]], cbind(bwnet$unmergedColors, bwnet$colors),
+                    c("unmerged", "merged"),
+                    dendroLabels = FALSE,
+                    addGuide = TRUE, 
+                    hang = 0.03, 
+                    guideHang = 0.05)
+#this shows that there are a lot of modules that were unmerged and are now merged 
+
+#create a traits file- binarize categorical variables -------------------------------------------
+#next we want to see which traits related to either treatment or sex 
+#so we have to binarize the variables, ethanol will be 1, and female will be 1
+hip_colData_mut <- hip_colData %>%
+  mutate(treatment_state_bin = ifelse(grepl('ethanol', treatment), 1, 0)) %>%
+  mutate(sex_state_bin = ifelse(grepl('female', sex), 1, 0)) %>%
+  dplyr::select(3,4)
+  
+# define numbers of genes and samples
+nSamples <- nrow(hip_norm.counts)
+nGenes <- ncol(hip_norm.counts)
+
+module.trait.corr <- cor(module_eigengenes, hip_colData_mut, use = 'p')
+module.trait.corr.pvals <- corPvalueStudent(module.trait.corr, nSamples)
+
+#visualize module-trait association as a heatmap
+heatmap.data <- merge(module_eigengenes, hip_colData_mut, by = 'row.names')
+
+head(heatmap.data)
+names(heatmap.data)
+#put the treatment and sex bins into x, and the range of rows for the modules into y
+
+CorLevelPlot(heatmap.data,
+             x= names(heatmap.data)[19:20],
+             y= names(heatmap.data)[2:18],
+             col = c("blue1", "skyblue", "white", "pink", "red"))
+
+hip_eigengenes <- module_eigengenes #renaming this df to make it hippocampus specific
+
+#salmon module genes------------------------------------------------------------------ 
+salmon_module <- module.gene.mapping %>%
+  filter(`bwnet$colors` == "salmon") %>% #filter by color for a specific module 
+  rownames()
+
+gene_symbols_salmon <- mapIds(org.Rn.eg.db, keys=salmon_module, column="SYMBOL", keytype="ENSEMBL")
+write_lines(gene_symbols_salmon, "salmon_symbols.txt")
+
+#salmon eigengene data frame 
+salmon_hip_eigengene <- hip_eigengenes %>%
+  select(MEsalmon) %>%
+  merge(hip_colData, by = 0) %>%
+  rename(ID = Row.names) %>%
+  rename(value = 2) %>%
+  mutate(ID = as.character(ID)) %>% #needed to change ID to character
+  arrange(treatment, sex) 
+
+salmon_hip_eigengene$ID <- factor(salmon_hip_eigengene$ID, levels = salmon_hip_eigengene$ID)
+#factoring ID so that ggplot with graph it in order 
+
+#salmon eigengene graph
+ggplot(data = salmon_hip_eigengene, aes(x = ID, y = value, fill = treatment, color = sex)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("ethanol" = "yellow", "control" = "aquamarine")) +
+  scale_color_manual(values = c("male" = "blue", "female" = "red")) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  labs(title = "salmon module")
+
+#midnightblue module genes------------------------------------------------------------------ 
+midnightblue_module <- module.gene.mapping %>% #astrocyte related 
+  filter(`bwnet$colors` == "midnightblue") %>% #filter by color for a specific module 
+  rownames()
+
+gene_symbols_midnightblue <- mapIds(org.Rn.eg.db, keys=midnightblue_module, column="SYMBOL", keytype="ENSEMBL")
+write_lines(gene_symbols_midnightblue, "midnightblue_symbols.txt")
+
+#midnightblue eigengene data frame 
+midnightblue_hip_eigengene <- hip_eigengenes %>%
+  select(MEmidnightblue) %>%
+  merge(hip_colData, by = 0) %>%
+  rename(ID = Row.names) %>%
+  rename(value = 2) %>%
+  mutate(ID = as.character(ID)) %>% #needed to change ID to character
+  arrange(sex, treatment) %>%
+  mutate(sex = ifelse(sex == "female", "Female", ifelse(sex == "male", "Male", sex)))
+
+#factoring ID so that ggplot with graph it in order 
+midnightblue_hip_eigengene$ID <- factor(midnightblue_hip_eigengene$ID, levels = midnightblue_hip_eigengene$ID) 
+
+#midnightblue eigengene graph
+ggplot(data = midnightblue_hip_eigengene, aes(x = ID, y = value, fill = treatment)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("ethanol" = "#E7B800", "control" = "#00AFBB")) + 
+  #scale_color_manual(values = c("male" = "blue", "female" = "red")) + 
+  theme_prism() + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  labs(title = "midnightblue module") 
+
+mean_se_midnightblue <- midnightblue_hip_eigengene %>%
+  group_by(sex, treatment) %>%
+  summarise(mean_value = mean(value),
+            sem = sd(value) / sqrt(n()))
+
+results_path <- "~/Documents/R Projects/tag-seq/bigtagseq/Graphs"
+
+#midnightblue eigengene graph grouped version 
+ggplot(mean_se_midnightblue, aes(sex, mean_value, color = treatment, fill = treatment)) + 
+  # geom_bar(size = 1, width = 0.9, position = position_dodge(width = 1), stat = "identity", alpha = 0.1) +
+  # geom_violin(data = midnightblue_hip_eigengene, aes(y = value), alpha = 0.1, lwd = 1, position = position_dodge(width = 1)) +
+  geom_errorbar(aes(ymin = mean_value - sem, ymax = mean_value + sem, color = treatment),
+                width = 0.2,  # Adjust this value for the width of the error bars
+                position = position_dodge(width = 1),
+                size = 1.0) +
+  stat_summary(fun = "mean",
+               aes(fill = treatment),
+               geom = "crossbar",
+               position = position_dodge(width = 1),
+               width = 0.5)+
+  geom_jitter(data = midnightblue_hip_eigengene, aes(y = value),
+              shape = 20, size = 3, position = position_jitterdodge(dodge.width = 1, jitter.width = 0.1), alpha = 0.6) +
+  ylab("Relative Eigengene Expression") +
+#  scale_y_continuous(labels = function(x) format(x, scientific = FALSE), expand = expansion(mult = c(0, 0)), limits = c(0,60000)) + 
+  scale_fill_manual(values = c("#00AFBB", "#E7B800")) +
+  scale_color_manual(values = c("#00AFBB", "#E7B800")) +
+  theme_prism(base_size = 18, base_family = "arial") +
+  theme(legend.position = "none") +
+  xlab("")
+
+ggsave(
+  "/mdblue_eigengene.png",
+  path = results_path,
+  height = 5,
+  width = 5
+  )
+
+#anova on eigengene 
+
+#anova for: main effect of treatment and interaction effect 
+mdblue_aov <- aov(value ~ treatment * sex, data = midnightblue_hip_eigengene)
+summary(mdblue_aov)
+
+tukey_result <- emmeans(mdblue_aov, specs = pairwise ~ treatment | sex)
+tukey_summary <- summary(tukey_result, adjust = "tukey")
+tukey_summary
+
+#red module genes------------------------------------------------------------------ 
+red_module <- module.gene.mapping %>%
+  filter(`bwnet$colors` == "red") %>% #filter by color for a specific module 
+  rownames()
+
+gene_symbols_red <- mapIds(org.Rn.eg.db, keys=red_module, column="SYMBOL", keytype="ENSEMBL")
+write_lines(gene_symbols_red, "red_symbols.txt")
+
+#red eigengene data frame 
+red_hip_eigengene <- hip_eigengenes %>%
+  select(MEred) %>%
+  merge(hip_colData, by = 0) %>%
+  rename(ID = Row.names) %>%
+  rename(value = 2) %>%
+  mutate(ID = as.character(ID)) %>% #needed to change ID to character
+  arrange(treatment, sex) 
+
+red_hip_eigengene$ID <- factor(red_hip_eigengene$ID, levels = red_hip_eigengene$ID)
+#factoring ID so that ggplot with graph it in order 
+
+#red eigengene graph 
+ggplot(data = red_hip_eigengene, aes(x = ID, y = value, fill = treatment, color = sex)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("ethanol" = "yellow", "control" = "aquamarine")) +
+  scale_color_manual(values = c("male" = "blue", "female" = "red")) + 
+  labs(title = "red module")
+
+#I uploaded the text files into webgestalt (network topology based analysis)
+#Enrichr is the other good tool (both are web based)
+#Panglao for cell types 
+#Bioplanet 2019 for pathways 
+#GO biological process for process 
+
+#kME values---------------------------------------------------
+# Function for converting ensembl ids to gene symbols
+convert_ensembl_to_entrez <- function(ensembl_ids) {
+  entrez_ids <- mapIds(org.Rn.eg.db, keys=ensembl_ids, column="SYMBOL", keytype="ENSEMBL")
+  return(entrez_ids)
+}
+
+#extracting all kME values
+kME_values <- cor(hip_norm.counts, hip_eigengenes)
+
+#salmon----
+kME_module_salmon <- kME_values[, 13] 
+kME_salmon <- data.frame(Gene = rownames(kME_values), kME = kME_module_salmon) %>%
+  arrange(desc(kME))
+
+kME_salmon$SYMBOL <- convert_ensembl_to_entrez(kME_salmon$Gene)
+
+#red-----
+kME_module_red <- kME_values[, 14] 
+kME_red <- data.frame(Gene = rownames(kME_values), kME = kME_module_red) %>%
+  arrange(desc(kME))
+
+kME_red$SYMBOL <- convert_ensembl_to_entrez(kME_red$Gene)
+
+#midnightblue----
+kME_module_midnightblue <- kME_values[, 10] 
+kME_midnightblue <- data.frame(Gene = rownames(kME_values), kME = kME_module_midnightblue) %>%
+  arrange(desc(kME))
+
+kME_midnightblue$SYMBOL <- convert_ensembl_to_entrez(kME_midnightblue$Gene)
+
+#Extracting data for cytoscape------------------------------------------------
+#we need information about nodes, edges and connection weights 
+#here is a tutorial: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC10500560/
+
+mergedColors <- bwnet$colors
+modules = c("midnightblue") #change this for the module of interest 
+probes <- colnames(hip_norm.counts)
+inModule <- mergedColors %in% modules
+modProbes <- probes[inModule]
+gene_symbols_cyto <- mapIds(org.Rn.eg.db, keys=modProbes, column="SYMBOL", keytype="ENSEMBL")
+
+modTOM = TOM[inModule, inModule]  
+dimnames(modTOM) = list(modProbes, modProbes)
+
+cyt <- exportNetworkToCytoscape(modTOM, 
+                                 edgeFile = paste("CytoscapeInput-edges-", paste(modules, collapse="-"), ".txt", sep=""),
+                                 nodeFile = paste("CytoscapeInput-nodes-", paste(modules, collapse="-"), ".txt", sep=""),
+                                 weighted = TRUE,
+                                 threshold = 0.1, #lowering this reduces connections
+                                 nodeNames = modProbes,
+                                 altNodeNames = gene_symbols_cyto,
+                                 nodeAttr = mergedColors[inModule])
+```
+
+WGCNA for entorhinal cortex
+
+```{r}
+##Tutorials:
+#https://rstudio-pubs-static.s3.amazonaws.com/687551_ed469310d8ea4652991a2e850b0018de.html
+#https://www.youtube.com/watch?v=gYE59uEMXT4&t=419s < mostly followed this one
+#https://wikis.utexas.edu/display/bioiteam/Clustering+using+WGCNA
+
+#detect outlier genes---------------------------------------------------------------
+gsg<- goodSamplesGenes(t(ec_counts_data))
+summary(gsg)
+gsg$allOK #result is false- so there are outliers. we need to find these genes and exclude from analysis 
+
+table(gsg$goodGenes)
+table(gsg$goodSamples)
+
+#remove genes that are detected as outliers
+data_nooutlier <- ec_counts_data[gsg$goodGenes == TRUE,]
+
+#remove outlier samples - hierarchical clustering (method 1) (none found)
+htree <- hclust(dist(t(data_nooutlier)), method = "average")
+plot(htree)
+
+#pca- method 2 for identifying outliers. Check for outliers (none found)
+pca <- prcomp(t(ec_counts_data))
+pca.dat <- pca$x
+
+pca.var <- pca$sdev^2
+pca.var.percent <- round(pca.var/sum(pca.var) *100, digits = 2)
+
+pca.dat <- as.data.frame(pca.dat)
+
+ggplot(pca.dat, aes(PC1, PC2)) + 
+  geom_point() + 
+  geom_text(label = rownames(pca.dat)) + 
+  labs(x = paste0('PC1: ',pca.var.percent[1], ' %'),
+       y = paste0('PC2: ', pca.var.percent[2], ' %'))
+
+
+# Normalization with DESeq------------------------------------------------------
+#expression data needs to be normalized 
+#ensuring ronames and column names are identical
+all(rownames(ec_colData) %in% colnames(data_nooutlier))
+all(rownames(ec_colData) == colnames(data_nooutlier))
+
+#create dds 
+ec_dds2 <- DESeqDataSetFromMatrix(countData = data_nooutlier, 
+                                   colData = ec_colData, 
+                                   design = ~1) #do not specify a model 
+
+#remove all genes with counts less than 15 in more than 75% of samples (38 * 0.75 = ~29)
+ec_dds_75 <- ec_dds2[rowSums(counts(ec_dds2) >= 15) >= 29,]
+nrow(ec_dds_75) #9540 genes left 
+
+#perform variance stabilization
+ec_dds_norm <- vst(ec_dds_75)
+
+#get normalized counts
+ec_norm.counts <- assay(ec_dds_norm) %>%
+  t()
+
+# Understanding soft power----------------------------------------------------------------
+power <- c(c(1:10), seq(from = 12, to = 50, by = 2))
+
+#call the network topology analysis function 
+ec_sft <- pickSoftThreshold(ec_norm.counts, 
+                  powerVector = power, 
+                  networkType = "signed",
+                  verbose = 5)
+
+ec_sft.data <- ec_sft$fitIndices
+
+#visualization to pick power
+ec_a1 <- ggplot(ec_sft.data, aes(Power, SFT.R.sq, label = Power)) + 
+  geom_point() + 
+  geom_text(nudge_y = 0.1) + 
+  geom_hline(yintercept = 0.8, color = 'red') + 
+  labs(x= 'Power', y = 'Scale free topology model fit, signed R^2') + 
+  theme_classic()
+
+ec_a1
+
+#you want to choose a power that has a value just higher than 0.8 R^2
+#in our instance soft power would be 4- this may be too low though based on my reading
+
+#visualization for mean connectivity 
+ec_a2 <- ggplot(ec_sft.data, aes(Power, mean.k., label= Power)) + 
+  geom_point() + 
+  geom_text(nudge_y = 0.1) + 
+  labs(x= 'Power', y = 'Mean Connectivity') + 
+  theme_classic()
+
+ec_a2
+
+
+# convert matrix to numeric -----------------------------------------------------------
+ec_norm.counts[] <- sapply(ec_norm.counts, as.numeric)
+
+soft_power <- 4 #enter soft power here 
+temp_cor <- cor
+cor <- WGCNA::cor
+
+#memory estimate w.r.t. blocksisze
+bwnet <- blockwiseModules(ec_norm.counts, 
+                 maxBlockSize = 14000, #size of block relates to how much ram you have, 5000 per 4 gb
+                 TOMType = "signed", 
+                 power = soft_power, 
+                 mergeCutHeight = 0.25, #threshold to merge similar modules 
+                 numericLabels = FALSE, #going by colors instead of numbers
+                 randomSeed = 1234,
+                 verbose = 3)
+
+cor <- temp_cor
+
+# Moduel Eigengenes
+module_eigengenes <- bwnet$MEs
+
+# # Calculate kME values for all genes in all modules
+# kME_values <- signedKME(bwnet$signedKME, moduleEigengenes)
+
+#Print out a preview
+head(module_eigengenes)
+
+#get number of genes for each module
+table(bwnet$colors)
+
+#plot a dendogram and the module colors before and after merging underneath
+plotDendroAndColors(bwnet$dendrograms[[1]], cbind(bwnet$unmergedColors, bwnet$colors),
+                    c("unmerged", "merged"),
+                    dendroLabels = FALSE,
+                    addGuide = TRUE, 
+                    hang = 0.03, 
+                    guideHang = 0.05)
+#this shows that there are a lot of modules that were unmerged and are now merged 
+
+#create a traits file- binarize categorical variables -------------------------------------------
+#next we want to see which traits related to either treatment or sex 
+#so we have to binarize the variables, ethanol will be 1, and female will be 1
+ec_colData_mut <- ec_colData %>%
+  mutate(treatment_state_bin = ifelse(grepl('ethanol', treatment), 1, 0)) %>%
+  mutate(sex_state_bin = ifelse(grepl('female', sex), 1, 0)) %>%
+  dplyr::select(3,4)
+  
+# define numbers of genes and samples
+nSamples <- nrow(ec_norm.counts)
+nGenes <- ncol(ec_norm.counts)
+
+module.trait.corr <- cor(module_eigengenes, ec_colData_mut, use = 'p')
+module.trait.corr.pvals <- corPvalueStudent(module.trait.corr, nSamples)
+
+#visualize module-trait association as a heatmap
+heatmap.data <- merge(module_eigengenes, ec_colData_mut, by = 'row.names')
+
+head(heatmap.data)
+names(heatmap.data)
+#put the treatment and sex bins into x, and the range of rows for the modules into y
+
+CorLevelPlot(heatmap.data,
+             x= names(heatmap.data)[16:17],
+             y= names(heatmap.data)[2:15],
+             col = c("blue1", "skyblue", "white", "pink", "red"))
+
+ec_eigengenes <- module_eigengenes #renaming this df to make it ec specific
+
+#green yellow module genes--------------------------------------------------------
+greenyellow_module <- module.gene.mapping %>%
+  filter(`bwnet$colors` == "greenyellow") %>% #filter by color for a specific module 
+  rownames()
+
+gene_symbols_greenyellow <- mapIds(org.Rn.eg.db, keys=greenyellow_module, column="SYMBOL", keytype="ENSEMBL")
+write_lines(gene_symbols_greenyellow, "greenyellow_symbols.txt")
+
+#greenyellow eigengene data frame 
+greenyellow_ec_eigengene <- ec_eigengenes %>%
+  select(MEgreenyellow) %>%
+  merge(ec_colData, by = 0) %>%
+  rename(ID = Row.names) %>%
+  rename(value = 2) %>%
+  mutate(ID = as.character(ID)) %>% #needed to change ID to character
+  arrange(treatment, sex) 
+
+greenyellow_ec_eigengene$ID <- factor(greenyellow_ec_eigengene$ID, levels = greenyellow_ec_eigengene$ID)
+#factoring ID so that ggplot with graph it in order 
+
+#greenyellow eigengene graph
+ggplot(data = greenyellow_ec_eigengene, aes(x = ID, y = value, fill = treatment, color = sex)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("ethanol" = "yellow", "control" = "aquamarine")) +
+  scale_color_manual(values = c("male" = "blue", "female" = "red")) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  labs(title = "greenyellow module")
+
+#blue module genes------------------------------------------------------------------ 
+blue_module <- module.gene.mapping %>% #astrocyte related 
+  filter(`bwnet$colors` == "blue") %>% #filter by color for a specific module
+  rownames()
+
+gene_symbols_blue <- mapIds(org.Rn.eg.db, keys=blue_module, column="SYMBOL", keytype="ENSEMBL")
+write_lines(gene_symbols_blue, "blue_symbols.txt")
+
+#blue eigengene data frame 
+blue_ec_eigengene <- ec_eigengenes %>%
+  select(MEblue) %>%
+  merge(ec_colData, by = 0) %>%
+  rename(ID = Row.names) %>%
+  rename(value = 2) %>%
+  mutate(ID = as.character(ID)) %>% #needed to change ID to character
+  arrange(treatment, sex) 
+
+blue_ec_eigengene$ID <- factor(blue_ec_eigengene$ID, levels = blue_ec_eigengene$ID)
+#factoring ID so that ggplot with graph it in order 
+
+#blue eigengene graph
+ggplot(data = blue_ec_eigengene, aes(x = ID, y = value, fill = treatment, color = sex)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("ethanol" = "yellow", "control" = "aquamarine")) +
+  scale_color_manual(values = c("male" = "blue", "female" = "red")) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  labs(title = "blue module")
+
+#magenta module genes----------------------------------------------------------------
+magenta_module <- module.gene.mapping %>% #astrocyte related 
+  filter(`bwnet$colors` == "magenta") %>% #filter by color for a specific module
+  rownames()
+
+gene_symbols_magenta <- mapIds(org.Rn.eg.db, keys=magenta_module, column="SYMBOL", keytype="ENSEMBL")
+write_lines(gene_symbols_magenta, "magenta_symbols.txt")
+
+#magenta eigengene data frame 
+magenta_ec_eigengene <- ec_eigengenes %>%
+  select(MEmagenta) %>%
+  merge(ec_colData, by = 0) %>%
+  rename(ID = Row.names) %>%
+  rename(value = 2) %>%
+  mutate(ID = as.character(ID)) %>% #needed to change ID to character
+  arrange(treatment, sex) 
+
+magenta_ec_eigengene$ID <- factor(magenta_ec_eigengene$ID, levels = magenta_ec_eigengene$ID)
+#factoring ID so that ggplot with graph it in order 
+
+#magenta eigengene graph
+ggplot(data = magenta_ec_eigengene, aes(x = ID, y = value, fill = treatment, color = sex)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("ethanol" = "yellow", "control" = "aquamarine")) +
+  scale_color_manual(values = c("male" = "blue", "female" = "red")) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  labs(title = "magenta module")
+
+#kME values---------------------------------------------------
+# Function for converting ensembl ids to gene symbols
+convert_ensembl_to_entrez <- function(ensembl_ids) {
+  entrez_ids <- mapIds(org.Rn.eg.db, keys=ensembl_ids, column="SYMBOL", keytype="ENSEMBL")
+  return(entrez_ids)
+}
+
+#extracting all kME values
+kME_values <- cor(ec_norm.counts, ec_eigengenes)
+
+#greenyellow----
+kME_module_greenyellow <- kME_values[, 6] 
+kME_greenyellow <- data.frame(Gene = rownames(kME_values), kME = kME_module_greenyellow) %>%
+  arrange(desc(kME))
+
+kME_greenyellow$SYMBOL <- convert_ensembl_to_entrez(kME_greenyellow$Gene)
+
+#blue-----
+kME_module_blue <- kME_values[, 12] 
+kME_blue <- data.frame(Gene = rownames(kME_values), kME = kME_module_blue) %>%
+  arrange(desc(kME))
+
+kME_blue$SYMBOL <- convert_ensembl_to_entrez(kME_blue$Gene)
+
+#magenta----
+kME_module_magenta <- kME_values[, 10] 
+kME_magenta <- data.frame(Gene = rownames(kME_values), kME = kME_module_magenta) %>%
+  arrange(desc(kME))
+
+kME_magenta$SYMBOL <- convert_ensembl_to_entrez(kME_magenta$Gene)
+
+
+```
+
+Pathway Enrichment analysis clusterProfiler
+
+```{r}
+#tutorials: https://biostatsquid.com/pathway-enrichment-analysis-tutorial-clusterprofiler/
+
+#taking data frames, function to edit data frames with the format that clusterProfiler needs 
+
+clusterdf <- function(x) {
+  # Remove rows with missing values
+  x <- na.omit(x)
+  # Feature 1: Numeric vector
+  numeric_vector <- x[, 2]
+  # Feature 2: Named vector
+  names(numeric_vector) <- as.character(x[, 7])
+  # Feature 3: Sort in decreasing order
+  numeric_vector <- sort(numeric_vector, decreasing = TRUE)
+  # Return the modified numeric vector
+  return(numeric_vector)
+}
+
+#here are the data frames we need via the function 
+male_hip_cluster <- clusterdf(male_hip_resOrdered_df)
+fem_hip_cluster <- clusterdf(male_ec_resOrdered_df)
+male_ec_cluster <- clusterdf(fem_hip_resOrdeblue_df)
+fem_ec_cluster <- clusterdf(fem_ec_resOrdered_df)
+
+#gse creator function
+gse_maker <- function(x) {
+x <- gseGO(geneList=x, 
+             ont ="ALL", 
+             keyType = "SYMBOL",
+             minGSSize = 3, 
+             maxGSSize = 800, 
+             pvalueCutoff = 0.05, 
+             verbose = FALSE, 
+             OrgDb = org.Rn.eg.db, 
+             pAdjustMethod = "none")
+}
+
+male_hip_cluster_gse <- gse_maker(male_hip_cluster)
+fem_hip_cluster_gse <- gse_maker(fem_hip_cluster)
+male_ec_cluster_gse <- gse_maker(male_ec_cluster)
+fem_ec_cluster_gse <- gse_maker(fem_ec_cluster)
+
+results_path <- "~/Documents/R Projects/tag-seq/bigtagseq/Graphs"
+
+male_hip_dot_graph <- dotplot(male_hip_cluster_gse, showCategory=3, split=".sign") + facet_grid(.~.sign) + theme(axis.text.y = element_text(size = 10)) + ggtitle("Male Hippocampus") + theme_prism(base_size = 10, border = TRUE) 
+male_hip_dot_graph 
+
+ggsave(
+  "~/gsea_male_hip.png",
+  path = results_path,
+  height = 4,
+  width = 6
+  )
+
+heatplot(male_hip_cluster_gse, showCategory = 15)
+
+fem_hip_dot_graph <- dotplot(fem_hip_cluster_gse, showCategory=3, split=".sign") + facet_grid(.~.sign) + theme(axis.text.y = element_text(size = 10)) + ggtitle("Female Hippocampus") + theme_prism(base_size = 10, border = TRUE) 
+fem_hip_dot_graph
+
+ggsave(
+  "~/gsea_fem_hip.png",
+  path = results_path,
+  height = 4,
+  width = 6
+  )
+
+male_ec_dot_graph <- dotplot(male_ec_cluster_gse, showCategory=3, split=".sign") + facet_grid(.~.sign) + theme(axis.text.y = element_text(size = 10)) + ggtitle("Male Entorhinal Cortex") + theme_prism(base_size = 10, border = TRUE) 
+male_ec_dot_graph
+
+ggsave(
+  "~/gsea_male_ec.png",
+  path = results_path,
+  height = 4,
+  width = 6
+  )
+
+fem_ec_dot_graph <- dotplot(fem_ec_cluster_gse, showCategory=3, split=".sign") + facet_grid(.~.sign) + theme(axis.text.y = element_text(size = 10)) + ggtitle("Female Entorhinal Cortex") + theme_prism(base_size = 10, border = TRUE) 
+fem_ec_dot_graph
+
+ggsave(
+  "~/gsea_fem_ec.png",
+  path = results_path,
+  height = 4,
+  width = 6
+  )
+
+#Comparing groups directly using compareCluster()-------------------------------------
+#the input is lists of ENTREZ IDs
+male_hip_resOrdered_rownames <- rownames(male_hip_resOrdered_df) %>%
+  bitr(fromType = "ENSEMBL", toType = "ENTREZID", OrgDb = org.Rn.eg.db, drop = TRUE) %>%
+  pull(ENTREZID) %>% #pull is designed to pull vectors 
+  as.character()
+
+male_ec_resOrdered_rownames <- rownames(male_ec_resOrdered_df) %>%
+  bitr(fromType = "ENSEMBL", toType = "ENTREZID", OrgDb = org.Rn.eg.db, drop = TRUE) %>%
+  pull(ENTREZID) %>% #pull is designed to pull vectors 
+  as.character()
+
+fem_hip_resOrdered_rownames <- rownames(fem_hip_resOrdered_df) %>%
+  bitr(fromType = "ENSEMBL", toType = "ENTREZID", OrgDb = org.Rn.eg.db, drop = TRUE) %>%
+  pull(ENTREZID) %>% #pull is designed to pull vectors 
+  as.character()
+ 
+fem_ec_resOrdered_rownames <- rownames(fem_ec_resOrdered_df) %>%
+  bitr(fromType = "ENSEMBL", toType = "ENTREZID", OrgDb = org.Rn.eg.db, drop = TRUE) %>%
+  pull(ENTREZID) %>% #pull is designed to pull vectors 
+  as.character()
+
+
+# #Combining the four gene lists into a single one by EnsemblID
+compareCluster_genelist <- list(
+  "EC- Female" = fem_ec_resOrdered_rownames,
+  "EC- Male" = male_ec_resOrdered_rownames,
+  "Hip- Female" = fem_hip_resOrdered_rownames,
+  "Hip- Male" = male_hip_resOrdered_rownames
+)
+
+str(compareCluster_genelist)
+
+#enrichGO
+enrichGO_result <- compareCluster(
+  compareCluster_genelist,
+  fun = enrichGO,
+  OrgDb = "org.Rn.eg.db", 
+  ont="BP",
+)
+
+
+
+#graph
+options(enrichplot.colours = c("blue","turquoise"))
+
+compare_enrichGo_graph <- dotplot(enrichGO_result,
+        showCategory = 12,
+        font.size = 14,
+        includeAll = FALSE) +
+  ggtitle("Biological Processes Enrichment Analysis") + 
+  theme_prism(base_size = 11, border = TRUE) + 
+  theme(panel.grid.major.y = element_line(color = "gray", linetype = "solid"),
+        panel.border = element_rect(color = "black",  # Border color
+                                    size = 2),
+        legend.position = "bottom") 
+ 
+ggsave(
+  "~/BP_GO.png",
+  path = results_path,
+  height = 9,
+  width = 6
+  )
+
+#KEGG----------
+KEGG_result <- compareCluster(
+  compareCluster_genelist,
+  fun = "enrichKEGG",
+  organism = "rno",
+  pvalueCutoff = .05,
+  pAdjustMethod = "BY",
+)
+
+#graph
+options(enrichplot.colours = c("darkred","orange"))
+
+compare_enrichGo_graph <- dotplot(KEGG_result,
+        showCategory = 12,
+        font.size = 14,
+        includeAll = FALSE) +
+  ggtitle("KEGG Pathways") + 
+  theme_prism(base_size = 11, border = TRUE) + 
+  theme(panel.grid.major.y = element_line(color = "gray", linetype = "solid"),
+        panel.border = element_rect(color = "black",  # Border color
+                                    size = 2),
+        legend.position = "bottom") 
+
+ggsave(
+  "~/Kegg_Pathways.png",
+  path = results_path,
+  height = 9,
+  width = 6
+  )
+
+
+```
+
+Metascape top 5 enriched pathways midnight blue
+
+```{r}
+goanalysis_mdblue <- read.csv("~/Documents/R Projects/tag-seq/bigtagseq/goanalysis_logs.csv") 
+
+#factoring
+goanalysis_mdblue$pathways <- factor(goanalysis_mdblue$pathways, levels = goanalysis_mdblue$pathways)
+
+# Reverse the order of levels
+goanalysis_mdblue$pathways <- forcats::fct_rev(goanalysis_mdblue$pathways)
+
+results_path <- "~/Documents/R Projects/tag-seq/bigtagseq/Graphs"
+
+ggplot(data = goanalysis_mdblue, aes(x = pathways, y = log)) + 
+  geom_bar(stat = "identity", fill = "lightgray", color = "black", size = 1) + 
+  theme_prism() + 
+  theme(axis.text.y = element_blank()) + 
+  scale_y_continuous(limits = c(0, 5), expand = c(0, 0)) + 
+  coord_flip() 
+
+ggsave(
+  "~/metascape_mdblue.png",
+  path = results_path,
+  height = 4,
+  width = 8.5
+  )
+```
