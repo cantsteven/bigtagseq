@@ -13,11 +13,11 @@ The Data folder contains the following:
 
 ### big_count_data.csv
 
-This is the raw count matrix. The first column contains gene_ids, and subsequent columns contain counts for each id. 
+This is the raw count matrix. The first column contains gene_ids, and subsequent columns contain counts for each subject id. 
 
 ### exp_design.csv
 
-This file countains the experimental design information. Columns include id (maps to the id column names in big_count_data.csv), treatment (control or ethanol treatment), sex (male or female), and region (hippo for hippocampus and entor for entorhinal cortex). 
+This file countains the experimental design information. Columns include id (maps to the subject id column names in big_count_data.csv), treatment (control or ethanol treatment), sex (male or female), and region (hippo for hippocampus and entor for entorhinal cortex). 
 
 ## Dependencies 
 The following R packages were used in each Quarto document: 
