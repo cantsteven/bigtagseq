@@ -1,4 +1,4 @@
-# Guerin et al., 2025: Alcohol and Astrocytes Publication
+# Guerin et al., 2025: BIGtagseq Publication
 ## Overview
 This repository contains code for the data analysis of "Gene Expression Analysis Suggests Critical Role of Astrocytes in Abstinence from Ethanol Dependence" (Guerin et al., 2025)
 
