@@ -36,34 +36,45 @@ The following R packages were used in the Rmd document:
 
 ## References
 tidyverse
+
 Wickham H, Averick M, Bryan J, Chang W, McGowan LD, François R, Grolemund G, Hayes A, Henry L, Hester J, Kuhn M, Pedersen TL, Miller E, Bache SM, Müller K, Ooms J, Robinson D, Seidel DP, Spinu V, Takahashi K, Vaughan D, Wilke C, Woo K, Yutani H (2019). "Welcome to the tidyverse." Journal of Open Source Software, 4(43), 1686. doi:10.21105/joss.01686
 
 DESeq2
+
 Love MI, Huber W, Anders S (2014). "Moderated estimation of fold change and dispersion for RNA-seq data with DESeq2." Genome Biology, 15(12), 550. doi:10.1186/s13059-014-0550-8
 
 apeglm
+
 Zhu A, Ibrahim JG, Love MI (2019). "Heavy-tailed prior distributions for sequence count data: removing the noise and preserving large differences." Bioinformatics, 35(12), 2084–2092. doi:10.1093/bioinformatics/bty895
 
 WGCNA
+
 Langfelder P, Horvath S (2008). "WGCNA: an R package for weighted correlation network analysis." BMC Bioinformatics, 9, 559. doi:10.1186/1471-2105-9-559
 
 EnhancedVolcano
+
 Blighe K, Rana S, Lewis M (2019). "EnhancedVolcano: Publication-ready volcano plots with enhanced colouring and labeling." R package version 1.17.0. https://github.com/kevinblighe/EnhancedVolcano
 
 org.Rn.eg.db
+
 Carlson M (2023). org.Rn.eg.db: Genome wide annotation for Rat. R package version 3.18.0. https://bioconductor.org/packages/org.Rn.eg.db/
 
 ggpubr
+
 Kassambara A (2023). ggpubr: 'ggplot2' Based Publication Ready Plots. R package version 0.6.0. https://CRAN.R-project.org/package=ggpubr
 
 pheatmap
+
 Kolde R (2019). pheatmap: Pretty Heatmaps. R package version 1.0.12. https://CRAN.R-project.org/package=pheatmap
 
 stats
+
 R Core Team (2024). R: A language and environment for statistical computing. R Foundation for Statistical Computing, Vienna, Austria. https://www.R-project.org/
 
 emmeans
+
 Lenth RV (2023). emmeans: Estimated Marginal Means, aka Least-Squares Means. R package version 1.8.6. https://CRAN.R-project.org/package=emmeans
 
 AnnotationDbi
+
 Carlson M (2023). AnnotationDbi: Manipulation of SQLite-based annotations in Bioconductor. R package version 1.64.1. https://bioconductor.org/packages/AnnotationDbi/
