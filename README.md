@@ -3,9 +3,10 @@
 This repository contains code for the data analysis of "Gene Expression Analysis Suggests Critical Role of Astrocytes in Abstinence from Ethanol Dependence" (Guerin et al., 2025)
 
 The primary R markdown file used in this analysis is: 
+
 ### bigtagseq_2.Rmd
 
-This Quarto file documents the single-nucleus RNA-seq analysis workflow using the Seurat package in R. It covers the steps from data import (reading .h5 count matrices), sample metadata annotation, quality control, filtering, normalization, batch integration with Harmony, clustering, marker gene identification, initial visualization, cell type annotation, and saves a processed Seurat object. 
+This R Markdown file documents the tag-seq bulk RNA-seq analysis workflow in R. It covers steps from loading count and metadata tables, organizing sample annotations, filtering and normalizing gene expression data, performing differential expression analysis using DESeq2 for region- and sex-specific contrasts, annotating genes, outputting lists of differentially expressed genes, and generating visualizations including PCA plots, volcano plots, gene count boxplots, and heatmaps. The workflow also includes variance-based gene filtering and module detection using WGCNA for co-expression network analysis.
 
 ## Data folder
 
