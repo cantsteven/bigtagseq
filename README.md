@@ -21,7 +21,7 @@ This is the raw count matrix. The first column contains gene_ids, and subsequent
 This file countains the experimental design information. Columns include id (maps to the subject id column names in big_count_data.csv), treatment (control or ethanol treatment), sex (male or female), and region (hippo for hippocampus and entor for entorhinal cortex). 
 
 ## Dependencies 
-The following R packages were used in each Quarto document: 
+The following R packages were used in the Rmd document: 
 - tidyverse
 - DESeq2
 - apeglm
